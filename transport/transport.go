@@ -1,21 +1,10 @@
 package transport
 
-import "fmt"
-
-type NetAddr string
-
-type RPC struct {
-	From    NetAddr
-	Payload []byte
-}
-
-func (r RPC) String() string {
-	return fmt.Sprintf("{From: %s, Payload: %v}", r.From, r.Payload)
-}
+import "github.com/igumus/chainx/types"
 
 type Transport interface {
-	Addr() NetAddr
-	Consume() <-chan RPC
+	Addr() types.NetAddr
+	Consume() <-chan types.RPC
 	Connect(to Transport) error
-	SendMessage(to NetAddr, payload []byte) error
+	SendMessage(to types.NetAddr, payload []byte) error
 }

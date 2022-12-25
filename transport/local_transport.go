@@ -3,32 +3,34 @@ package transport
 import (
 	"fmt"
 	"sync"
+
+	"github.com/igumus/chainx/types"
 )
 
 type localTransport struct {
-	addr      NetAddr
-	consumeCh chan RPC
+	addr      types.NetAddr
+	consumeCh chan types.RPC
 	mu        sync.RWMutex
-	peers     map[NetAddr]*localTransport
+	peers     map[types.NetAddr]*localTransport
 }
 
-func NewLocalTransport(anAddr NetAddr) Transport {
+func NewLocalTransport(anAddr types.NetAddr) Transport {
 	return createLocalTransport(anAddr)
 }
 
-func createLocalTransport(anAddr NetAddr) *localTransport {
+func createLocalTransport(anAddr types.NetAddr) *localTransport {
 	return &localTransport{
 		addr:      anAddr,
-		consumeCh: make(chan RPC, 1024),
-		peers:     make(map[NetAddr]*localTransport),
+		consumeCh: make(chan types.RPC, 1024),
+		peers:     make(map[types.NetAddr]*localTransport),
 	}
 }
 
-func (t *localTransport) Consume() <-chan RPC {
+func (t *localTransport) Consume() <-chan types.RPC {
 	return t.consumeCh
 }
 
-func (t *localTransport) Addr() NetAddr {
+func (t *localTransport) Addr() types.NetAddr {
 	return t.addr
 }
 
@@ -39,14 +41,14 @@ func (t *localTransport) Connect(to Transport) error {
 	return nil
 }
 
-func (t *localTransport) SendMessage(to NetAddr, payload []byte) error {
+func (t *localTransport) SendMessage(to types.NetAddr, payload []byte) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	peer, ok := t.peers[to]
 	if !ok {
 		return fmt.Errorf("%s: unknown peer: %s", t.addr, to)
 	}
-	peer.consumeCh <- RPC{
+	peer.consumeCh <- types.RPC{
 		From:    t.addr,
 		Payload: payload,
 	}
