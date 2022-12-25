@@ -25,6 +25,6 @@ make test
 
 Thanks to Anthony De Meulemeester 🚀 for his amazing coding sessions.
 
-    - [Github](https://github.com/anthdm)
-    - [Youtube Channel](https://www.youtube.com/channel/UCIjIAXXsX4YMYeFj-LP42-Q)
+- [Github](https://github.com/anthdm)
+- [Youtube Channel](https://www.youtube.com/channel/UCIjIAXXsX4YMYeFj-LP42-Q)
 
