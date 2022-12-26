@@ -21,7 +21,7 @@ run: build ## Run example
 
 test: clean tidy ## Run unit tests
 	@go clean -testcache
-	@go test ./... 
+	@go test -v ./... 
 
 coverage: clean tidy ## Run code coverage
 	@go clean -testcache
