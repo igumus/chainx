@@ -62,5 +62,5 @@ func TestBlock_Encode_Decode(t *testing.T) {
 func TestBlock_Hash(t *testing.T) {
 	block := NewBlock(EmptyHeader(), nil)
 	hash := block.Hash()
-	require.False(t, hash.IsZeroHash())
+	require.False(t, hash.IsZero())
 }
