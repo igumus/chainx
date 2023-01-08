@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
-	h "hash"
 )
 
 type HashAlgorithm byte
@@ -36,16 +35,27 @@ func algorithmFactory(v byte) HashAlgorithm {
 	}
 }
 
-type hashFunc func() h.Hash
+type hashFunc func([]byte) []byte
+
+var defaultHasher hashFunc = hasherFactory(Sha2_256)
 
 func hasherFactory(alg HashAlgorithm) hashFunc {
 	switch alg {
 	case Sha1:
-		return sha1.New
+		return func(b []byte) []byte {
+			data := sha1.Sum(b)
+			return data[:]
+		}
 	case Sha2_512:
-		return sha512.New
+		return func(b []byte) []byte {
+			data := sha512.Sum512(b)
+			return data[:]
+		}
 	case Sha2_256:
-		return sha256.New
+		return func(b []byte) []byte {
+			data := sha256.Sum256(b)
+			return data[:]
+		}
 	default:
 		return nil
 	}

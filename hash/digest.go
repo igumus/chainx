@@ -2,22 +2,21 @@ package hash
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/sirupsen/logrus"
 )
 
 func createHash(v hashVersion, alg HashAlgorithm, data []byte) Hash {
-	var newAlg hashFunc = nil
-	newAlg = hasherFactory(alg)
-	if newAlg == nil {
+	var hasher hashFunc = nil
+
+	hasher = hasherFactory(alg)
+	if hasher == nil {
 		logrus.WithField("algorithm", alg).Error("unknown hash algorithm using default sha256")
-		newAlg = sha256.New
+		hasher = defaultHasher
 	}
 
-	digester := newAlg()
-	digest := digester.Sum(data)
+	digest := hasher(data)
 	digestLen := len(digest)
 
 	result := bytes.Join([][]byte{
@@ -70,10 +69,9 @@ func FromHexString(s string) (Hash, error) {
 }
 
 func FromBytes(b []byte) (Hash, error) {
-    _, _, err := decode(b)
+	_, _, err := decode(b)
 	if err != nil {
 		return ZeroHash, err
 	}
 	return Hash(b), nil
 }
-

@@ -1,10 +1,25 @@
 package hash
 
 import (
+	"crypto/sha256"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestHashing(t *testing.T) {
+	data := []byte("hello world")
+
+	digest1 := sha256.Sum256(data)
+	digest2 := sha256.New().Sum(data)
+	require.NotEqual(t, digest1, digest2)
+
+	sha := sha256.New()
+	sha.Write(data)
+	digest3 := sha.Sum(nil)
+
+	require.Equal(t, digest1[:], digest3)
+}
 
 func TestZeroHash(t *testing.T) {
 	testcases := []struct {
@@ -72,7 +87,7 @@ func TestCreateHashWithAlg(t *testing.T) {
 			require.Equal(t, byte(tc.alg), hash[1])
 			lendigest := hash[2]
 			require.Equal(t, int(lendigest), len(hash[3:]))
-            require.Nil(t, hash.Verify(tc.data))
+			require.Nil(t, hash.Verify(tc.data))
 		})
 	}
 }
