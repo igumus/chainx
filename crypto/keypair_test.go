@@ -48,7 +48,12 @@ func TestKeyPairSign(t *testing.T) {
 			require.Nil(t, err)
 			signature, err := key.Sign(tc.data)
 			require.Nil(t, err)
-			require.Equal(t, tc.shouldFail, !signature.Verify(tc.verify))
+            err = signature.Verify(tc.verify)
+            if tc.shouldFail {
+                require.NotNil(t, err)
+            } else {
+                require.Nil(t, err)
+            }
 		})
 	}
 }

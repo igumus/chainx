@@ -5,7 +5,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/hex"
+	"errors"
 	"math/big"
+)
+
+var (
+	ErrNoSignature      = errors.New("signature not found")
+	ErrInvalidSignature = errors.New("signature is invalid")
 )
 
 type Signature struct {
@@ -14,7 +20,10 @@ type Signature struct {
 	PubKey []byte
 }
 
-func (s *Signature) Verify(data []byte) bool {
+func (s *Signature) Verify(data []byte) error {
+	if s == nil {
+		return ErrNoSignature
+	}
 	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), s.PubKey)
 	key := &ecdsa.PublicKey{
 		Curve: elliptic.P256(),
@@ -22,7 +31,10 @@ func (s *Signature) Verify(data []byte) bool {
 		Y:     y,
 	}
 
-	return ecdsa.Verify(key, data, s.R, s.S)
+	if !ecdsa.Verify(key, data, s.R, s.S) {
+		return ErrInvalidSignature
+	}
+	return nil
 }
 
 func (s *Signature) Bytes() []byte {

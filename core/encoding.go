@@ -2,38 +2,28 @@ package core
 
 import (
 	"encoding/gob"
-	"errors"
 	"io"
 )
 
-var ErrNotImplemented = errors.New("not implemented yet")
-
-func NewGobEncoder[T Block | Header](w io.Writer) func(*T) error {
-    return func(t *T) error {
-        return gob.NewEncoder(w).Encode(t)
-    }
+func generateGobDecoder[T Block | Header | Transaction]() func(io.Reader, *T) error {
+	return func(r io.Reader, t *T) error {
+		return gob.NewDecoder(r).Decode(t)
+	}
 }
 
-func NewGobDecoder[T Block | Header](r io.Reader) func(*T) error {
-    return func(t *T) error {
-        return gob.NewDecoder(r).Decode(t)
-    }
+func generateGobEncoder[T Block | Header | Transaction]() func(io.Writer, *T) error {
+	return func(w io.Writer, t *T) error {
+		return gob.NewEncoder(w).Encode(t)
+	}
 }
 
-// TODO: (@igumus) search: isInstanceOf example for golang
-func NewBinaryEncoder[T Block | Header](w io.Writer) func(*T) error {
-    return func(t *T) error {
-        /*
-            if instanceOf(t, Block) {
-                // do block encoding stuff and return
-            } 
-            if instanceOf(t, Header) {
-                // do header encoding stuff and return
-            }
-            if instanceOf(t, Transaction) {
-                // do transaction encoding stuff and return
-            }
-        */
-        return ErrNotImplemented
-    }
-}
+var (
+	EncodeTransaction = generateGobEncoder[Transaction]()
+	DecodeTransaction = generateGobDecoder[Transaction]()
+
+	EncodeBlock = generateGobEncoder[Block]()
+	DecodeBlock = generateGobDecoder[Block]()
+
+	EncodeHeader = generateGobEncoder[Header]()
+	DecodeHeader = generateGobDecoder[Header]()
+)
