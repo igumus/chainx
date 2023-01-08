@@ -4,12 +4,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/hex"
 	"io"
+
+	"github.com/igumus/chainx/hash"
+	"github.com/igumus/chainx/types"
 )
 
 func GenerateKeyPair() (*KeyPair, error) {
-    return GenerateKeyPairFromReader(rand.Reader)
+	return GenerateKeyPairFromReader(rand.Reader)
 }
 
 func GenerateKeyPairFromReader(r io.Reader) (*KeyPair, error) {
@@ -22,29 +24,29 @@ func GenerateKeyPairFromReader(r io.Reader) (*KeyPair, error) {
 	}, nil
 }
 
-type PublicKey []byte
-
-func (pbk PublicKey) String() string {
-	return hex.EncodeToString(pbk)
-}
-
 type KeyPair struct {
 	privKey *ecdsa.PrivateKey
 }
 
-func (p *KeyPair) publicKey() PublicKey {
-	return elliptic.MarshalCompressed(p.privKey.PublicKey, p.privKey.PublicKey.X, p.privKey.PublicKey.Y)
+func (p *KeyPair) publicKey() []byte {
+	pkey := p.privKey.PublicKey
+	return elliptic.MarshalCompressed(pkey, pkey.X, pkey.Y)
+}
+
+func (p *KeyPair) Address() types.Address {
+	h := hash.CreateHash(p.publicKey())
+	return types.AddressFromBytes(h)
 }
 
 func (p *KeyPair) Sign(data []byte) (*Signature, error) {
 	r, s, err := ecdsa.Sign(rand.Reader, p.privKey, data)
-    if err != nil {
-        return nil, err
-    }
-    return &Signature{
-        R: r,
-        S: s,
-        PubKey: p.publicKey(),
-    }, nil
+	if err != nil {
+		return nil, err
+	}
+	return &Signature{
+		R:      r,
+		S:      s,
+		PubKey: p.publicKey(),
+	}, nil
 
 }

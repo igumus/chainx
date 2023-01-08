@@ -11,7 +11,7 @@ import (
 type Signature struct {
 	S      *big.Int
 	R      *big.Int
-	PubKey PublicKey
+	PubKey []byte
 }
 
 func (s *Signature) Verify(data []byte) bool {
