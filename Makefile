@@ -19,17 +19,12 @@ build: clean tidy ## Builds project
 run: build ## Run example
 	@${PROJECT_BINARY_OUTPUT}/bin/${PROJECT_BINARY}
 
-test: clean tidy ## Run unit tests
+test: build ## Run unit tests
 	@go clean -testcache
-	@go test -v ./... 
+	@go test ./... 
 
-coverage: clean tidy ## Run code coverage
-	@go clean -testcache
-	@go test ./... -coverprofile=./docs/coverage.out
-
-bench: test ## Run benchmarks
-	@go clean -testcache
-	@go test ./... -bench=.
+pre-commit: test ## Checks everything is allright
+	@echo "Commit Status: OK"
 
 ## Help:
 help: ## Show this help.
