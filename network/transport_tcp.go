@@ -1,7 +1,6 @@
 package network
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -64,7 +63,6 @@ func (t *tcp) Listen() error {
 }
 
 func (t *tcp) Dial(addr string) (net.Conn, error) {
-	fmt.Println("dialing: ", addr)
 	return net.DialTimeout("tcp", addr, 1*time.Second)
 }
 

@@ -121,12 +121,13 @@ func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
 
 	peer := &peer{
 		peerType: conn.LocalAddr().Network(),
+		state:    types.PendingPeer,
 		conn:     conn,
 		incoming: incoming,
 	}
 
 	n.pendingLock.Lock()
-	n.pendingPeers[peer.ID()] = peer
+	n.pendingPeers[types.PeerID(conn.RemoteAddr().String())] = peer
 	go peer.readLoop(n.delPeerCh, n.rpcPeerCh)
 	n.pendingLock.Unlock()
 	return peer
@@ -224,20 +225,21 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 	}
 
 	n.pendingLock.RLock()
-	defer n.pendingLock.RUnlock()
 	peer, ok := n.pendingPeers[from]
+	n.pendingLock.RUnlock()
 	if !ok {
 		return fmt.Errorf("handshaking failed with unknown pending peer: %s", from)
 	}
 	peer.handshake(msg.Id)
+
 	n.pendingLock.Lock()
 	delete(n.pendingPeers, from)
 	logrus.WithField("count", len(n.pendingPeers)).Info("pending peer status")
 	n.pendingLock.Unlock()
 
 	n.lock.Lock()
+	defer n.lock.Unlock()
 	n.peers[peer.ID()] = peer
-	n.lock.Unlock()
 
 	discoveryMessage := newDiscoveryMessage(n.ID(), msg)
 	discoveryMessageSerialized, err := discoveryMessage.message()
@@ -245,8 +247,6 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 		return err
 	}
 
-	n.lock.RLock()
-	defer n.lock.RUnlock()
 	for id, conn := range n.peers {
 		if id != peer.ID() {
 			go func(pc Peer) {
@@ -265,8 +265,13 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 					"netName": n.Name(),
 					"toPeer":  pc.ID(),
 				}).Info("sent discovery message")
-
 			}(conn)
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"netID":   n.ID(),
+				"netName": n.Name(),
+				"peer":    id,
+			}).Info("peer already in hanshaked peer list")
 		}
 	}
 	return nil
@@ -277,15 +282,6 @@ func (n *network) processPeerDiscovery(from types.PeerID, rawData []byte) error 
 	if err != nil {
 		return err
 	}
-
-	logrus.WithFields(logrus.Fields{
-		"netID":        n.ID(),
-		"netName":      n.Name(),
-		"from":         from,
-		"discoveredBy": msg.From,
-		"peerNetID":    msg.Data.Id,
-		"peerNetAddr":  msg.Data.Addr,
-	}).Info("received discovery message")
 
 	n.lock.RLock()
 	defer n.lock.RUnlock()
