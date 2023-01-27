@@ -23,10 +23,11 @@ func (m RemoteMessage) Decode() (*Message, error) {
 const (
 	// network message types
 	NetworkHandshake      MessageType = 0x1
-	NetworkPeerDiscovered MessageType = 0x2
-	NetworkReserved_3     MessageType = 0x3
-	NetworkReserved_4     MessageType = 0x4
-	NetworkReserved_5     MessageType = 0x5
+	NetworkHandshakeReply MessageType = 0x2
+	NetworkPeerDiscovered MessageType = 0x3
+	NetworkReserved_3     MessageType = 0x4
+	NetworkReserved_4     MessageType = 0x5
+	NetworkReserved_5     MessageType = 0x6
 
 	// chain message types
 

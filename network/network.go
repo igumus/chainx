@@ -126,8 +126,11 @@ func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
 		incoming: incoming,
 	}
 
+	id := types.PeerID(conn.RemoteAddr().String())
+
 	n.pendingLock.Lock()
-	n.pendingPeers[types.PeerID(conn.RemoteAddr().String())] = peer
+	n.pendingPeers[id] = peer
+	logrus.WithField("addr", id).Info("peer added to pending list")
 	go peer.readLoop(n.delPeerCh, n.rpcPeerCh)
 	n.pendingLock.Unlock()
 	return peer
@@ -178,13 +181,27 @@ func (n *network) processPeerMessage(rpc types.RemoteMessage) {
 			"netName": n.Name(),
 			"from":    rpc.From,
 		}).Info("received new handshake message")
-		if err := n.processPeerHandshake(rpc.From, message.Data); err != nil {
+		if err := n.processPeerHandshake(rpc.From, message.Data, false); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"netID":   n.ID(),
 				"netName": n.Name(),
 				"from":    rpc.From,
 				"err":     err,
 			}).Error("processing handshake message failed")
+		}
+	case types.NetworkHandshakeReply:
+		logrus.WithFields(logrus.Fields{
+			"netID":   n.ID(),
+			"netName": n.Name(),
+			"from":    rpc.From,
+		}).Info("received new handshake reply message")
+		if err := n.processPeerHandshake(rpc.From, message.Data, true); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"netID":   n.ID(),
+				"netName": n.Name(),
+				"from":    rpc.From,
+				"err":     err,
+			}).Error("processing handshake reply message failed")
 		}
 	case types.NetworkPeerDiscovered:
 		logrus.WithFields(logrus.Fields{
@@ -207,7 +224,7 @@ func (n *network) processPeerMessage(rpc types.RemoteMessage) {
 			"netID":   n.ID(),
 			"netName": n.Name(),
 			"from":    rpc.From,
-		}).Warn("received uknown reserved network message")
+		}).Warn("received unhandled (but reserved) network message")
 	default:
 		logrus.WithFields(logrus.Fields{
 			"netID":   n.ID(),
@@ -218,7 +235,7 @@ func (n *network) processPeerMessage(rpc types.RemoteMessage) {
 	}
 }
 
-func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byte) error {
+func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byte, reply bool) error {
 	msg, err := decodeHandshakeMessage(rawHandshakeData)
 	if err != nil {
 		return err
@@ -238,43 +255,57 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 	n.pendingLock.Unlock()
 
 	n.lock.Lock()
-	defer n.lock.Unlock()
 	n.peers[peer.ID()] = peer
+	n.lock.Unlock()
 
-	discoveryMessage := newDiscoveryMessage(n.ID(), msg)
-	discoveryMessageSerialized, err := discoveryMessage.message()
-	if err != nil {
-		return err
-	}
+	if reply {
+		discoveryMessage := newDiscoveryMessage(n.ID(), msg)
+		discoveryMessageSerialized, err := discoveryMessage.message()
+		if err != nil {
+			return err
+		}
 
-	for id, conn := range n.peers {
-		if id != peer.ID() {
-			go func(pc Peer) {
-				err := pc.Send(discoveryMessageSerialized)
-				if err != nil {
+		for id, conn := range n.peers {
+			if id != peer.ID() {
+				go func(pc Peer) {
+					err := pc.Send(discoveryMessageSerialized)
+					if err != nil {
+						logrus.WithFields(logrus.Fields{
+							"netID":   n.ID(),
+							"netName": n.Name(),
+							"toPeer":  pc.ID(),
+							"err":     err,
+						}).Error("sending discovery message failed")
+						return
+					}
 					logrus.WithFields(logrus.Fields{
 						"netID":   n.ID(),
 						"netName": n.Name(),
 						"toPeer":  pc.ID(),
-						"err":     err,
-					}).Error("sending discovery message failed")
-					return
-				}
+					}).Info("sent discovery message")
+				}(conn)
+			} else {
 				logrus.WithFields(logrus.Fields{
 					"netID":   n.ID(),
 					"netName": n.Name(),
-					"toPeer":  pc.ID(),
-				}).Info("sent discovery message")
-			}(conn)
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"netID":   n.ID(),
-				"netName": n.Name(),
-				"peer":    id,
-			}).Info("peer already in hanshaked peer list")
+					"peer":    id,
+				}).Info("peer already in hanshaked peer list")
+			}
 		}
+		return nil
 	}
-	return nil
+
+	handshakeReply := &networkHandshakeReplyMessage{
+		Id:   n.ID(),
+		Addr: n.transport.Addr(),
+	}
+
+	hmsg, err := handshakeReply.message()
+	if err != nil {
+		return err
+	}
+
+	return peer.Send(hmsg)
 }
 
 func (n *network) processPeerDiscovery(from types.PeerID, rawData []byte) error {
@@ -295,22 +326,8 @@ func (n *network) processPeerDiscovery(from types.PeerID, rawData []byte) error 
 		return nil
 	}
 
-	conn, err := n.transport.Dial(msg.Data.Addr)
-	if err != nil {
-		return err
-	}
-
-	peer := &peer{
-		id:       msg.Data.Id,
-		peerType: n.transport.Type(),
-		conn:     conn,
-		incoming: false,
-	}
-
-	n.lock.Lock()
-	defer n.lock.Unlock()
-	n.peers[types.PeerID(msg.Data.Id)] = peer
-	return nil
+	_, err = n.Dial(msg.Data.Addr)
+	return err
 }
 
 func (n *network) Start() {
