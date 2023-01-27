@@ -112,7 +112,7 @@ func (n *network) process() {
 	}
 }
 
-func (n *network) processPeerJoin(conn net.Conn, incoming bool) {
+func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
 	logrus.WithFields(logrus.Fields{
 		"netID":    n.ID(),
 		"netName":  n.Name(),
@@ -129,6 +129,7 @@ func (n *network) processPeerJoin(conn net.Conn, incoming bool) {
 	n.pendingPeers[peer.ID()] = peer
 	go peer.readLoop(n.delPeerCh, n.rpcPeerCh)
 	n.pendingLock.Unlock()
+	return peer
 }
 
 func (n *network) processPeerLeave(peer Peer) {
@@ -341,7 +342,7 @@ func (n *network) Dial(addr string) (string, error) {
 		return "", err
 	}
 
-	n.processPeerJoin(conn, false)
+	peer := n.processPeerJoin(conn, false)
 
 	logrus.WithField("addr", addr).Info("waiting one second to send handshake")
 	time.Sleep(1 * time.Second)
