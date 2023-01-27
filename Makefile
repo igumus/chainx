@@ -13,11 +13,14 @@ clean: ## Cleans temporary folder
 	@rm -rf ${PROJECT_BINARY_OUTPUT}
 	@rm -rf ${PROJECT_RELEASER_OUTPUT}
 
-build: clean tidy ## Builds project
-	@GO111MODULE=on CGO_ENABLED=0 go build -ldflags="-w -s" -o ${PROJECT_BINARY_OUTPUT}/bin/${PROJECT_BINARY} main.go
+build-node: clean tidy ## Build basic build-node
+	@GO111MODULE=on CGO_ENABLED=0 go build -ldflags="-w -s" -o ${PROJECT_BINARY_OUTPUT}/bin/node cmd/node/main.go
 
-run: build ## Run example
-	@${PROJECT_BINARY_OUTPUT}/bin/${PROJECT_BINARY}
+build-vnode: clean tidy ## Build basic build-node
+	@GO111MODULE=on CGO_ENABLED=0 go build -ldflags="-w -s" -o ${PROJECT_BINARY_OUTPUT}/bin/vnode cmd/vnode/main.go
+
+build: build-node build-vnode ## Builds project
+	@echo "Building Status: DONE"
 
 test: build ## Run unit tests
 	@go clean -testcache
