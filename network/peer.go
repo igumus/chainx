@@ -83,6 +83,10 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 func (p *peer) handshake(id string) {
 	p.id = id
 	p.state = types.HandshakedPeer
+	logrus.WithFields(logrus.Fields{
+		"peer": p.id,
+		"addr": p.conn.RemoteAddr().String(),
+	}).Info("changed peer state to handshaked")
 }
 
 func (p *peer) IsOutgoing() bool {
