@@ -18,6 +18,8 @@ type Network interface {
 	Start()
 	Dial(addr string) (string, error)
 	Consume() <-chan types.RemoteMessage
+	Send(peer types.PeerID, msg *types.Message) error
+	Broadcast(msg *types.Message) error
 	io.Closer
 }
 
@@ -323,4 +325,43 @@ func (n *network) Close() error {
 	}
 
 	return n.transport.Close()
+}
+
+func (n *network) Send(to types.PeerID, msg *types.Message) error {
+	dmsg, err := msg.Bytes()
+	if err != nil {
+		return err
+	}
+
+	n.lock.RLock()
+	defer n.lock.RUnlock()
+
+	peer, ok := n.peers[to]
+	if !ok {
+		// TODO (@igumus): maybe we should include peer searching mechanism
+		return fmt.Errorf("unknown peer: %s", to)
+	}
+	return peer.Send(dmsg)
+}
+
+func (n *network) Broadcast(msg *types.Message) error {
+	dmsg, err := msg.Bytes()
+	if err != nil {
+		return err
+	}
+
+	n.lock.RLock()
+	defer n.lock.RUnlock()
+	for _, peer := range n.peers {
+		go func(p Peer) {
+			if err := p.Send(dmsg); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"netID": n.ID(),
+					"peer":  p.ID(),
+					"err":   err,
+				}).Error("sending broadcast message failed")
+			}
+		}(peer)
+	}
+	return nil
 }
