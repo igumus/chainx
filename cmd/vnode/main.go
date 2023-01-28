@@ -2,24 +2,33 @@ package main
 
 import (
 	"flag"
-	"log"
 
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/network"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
+	debug := flag.Bool("debug", false, "sets log level to debug")
 	name := flag.String("name", "VNODE", "listen address of the http transport")
 	tcpAddr := flag.String("net-addr", ":3000", "listen address of the grpc transport")
 	flag.Parse()
 
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+
 	key, err := crypto.GenerateKeyPair()
 	if err != nil {
-		log.Fatal(err)
+		log.Panic().Err(err)
 	}
 	network, err := network.NewNetwork(key, network.WithName(*name), network.WithTCPTransport(*tcpAddr))
 	if err != nil {
-		log.Fatal(err)
+		log.Panic().Err(err)
 	}
 
 	network.Start()
