@@ -6,15 +6,12 @@ import (
 	"errors"
 )
 
-
 var (
-	zero          byte   = byte(0)
-	ZeroHash      Hash   = CreateHash([]byte{0})
-	zeroHashBytes []byte = ZeroHash.Bytes()
+	ZeroHash Hash = []byte{}
 
 	// Error Definitions
-	ErrHashNotVerified      = errors.New("hash not verified")
-	ErrMalformedHash        = errors.New("malformed hash")
+	ErrHashNotVerified = errors.New("hash not verified")
+	ErrMalformedHash   = errors.New("malformed hash")
 )
 
 type Hash []byte
