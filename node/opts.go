@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/igumus/chainx/core"
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/network"
 	"github.com/rs/zerolog"
@@ -19,6 +20,8 @@ type nodeOption struct {
 	validatorNode bool
 	keypair       *crypto.KeyPair
 	logger        zerolog.Logger
+	chain         core.BlockChain
+	pool          core.TXPool
 }
 
 func (n *nodeOption) validate() error {
@@ -35,6 +38,8 @@ func createOptions(opts ...NodeOption) (*nodeOption, error) {
 	options := &nodeOption{
 		blockTime: 5 * time.Second,
 		keypair:   nil,
+		chain:     nil,
+		pool:      nil,
 	}
 
 	for _, opt := range opts {
@@ -43,6 +48,28 @@ func createOptions(opts ...NodeOption) (*nodeOption, error) {
 
 	if err := options.validate(); err != nil {
 		return nil, err
+	}
+
+	// if chain implementation not specified
+	// instead of returning error, we will use
+	// default chain implementation
+	if options.chain == nil {
+		c, err := core.NewBlockChain()
+		if err != nil {
+			return nil, err
+		}
+		options.chain = c
+	}
+
+	// if transaction pool implementation not specified,
+	// instead of returning error, we will use
+	// default transaction pool implementation
+	if options.pool == nil {
+		p, err := core.NewTXPool()
+		if err != nil {
+			return nil, err
+		}
+		options.pool = p
 	}
 
 	// create zerolog logger instance
@@ -81,5 +108,17 @@ func WithKeypair(k *crypto.KeyPair) NodeOption {
 func WithDebugMode(b bool) NodeOption {
 	return func(no *nodeOption) {
 		no.debugMode = b
+	}
+}
+
+func WithChain(bc core.BlockChain) NodeOption {
+	return func(no *nodeOption) {
+		no.chain = bc
+	}
+}
+
+func WithTXPool(tp core.TXPool) NodeOption {
+	return func(no *nodeOption) {
+		no.pool = tp
 	}
 }

@@ -5,11 +5,13 @@ import (
 	"sync"
 
 	"github.com/igumus/chainx/crypto"
+	"github.com/rs/zerolog/log"
 )
 
 type BlockChain interface {
 	CurrentHeader() *Header
-	AddBlock(*crypto.KeyPair, []*Transaction) error
+	CreateBlock(*crypto.KeyPair, []*Transaction) (*Block, error)
+	AddBlock(*Block) error
 }
 
 type chain struct {
@@ -40,17 +42,24 @@ func (bc *chain) CurrentHeader() *Header {
 	return bc.currHeader
 }
 
-func (bc *chain) AddBlock(key *crypto.KeyPair, txs []*Transaction) error {
+func (bc *chain) CreateBlock(key *crypto.KeyPair, txs []*Transaction) (*Block, error) {
 	b, err := NewBlock(bc.CurrentHeader(), txs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = b.Sign(key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	if err := bc.validateBlock(b); err != nil {
+		return nil, err
+	}
+	return b, bc.addBlock(b)
+}
+
+func (bc *chain) AddBlock(b *Block) error {
 	if err := bc.validateBlock(b); err != nil {
 		return err
 	}
@@ -65,20 +74,33 @@ func (bc *chain) addBlock(b *Block) error {
 	}
 	bc.prevHeader = bc.currHeader
 	bc.currHeader = b.Header
+
+	log.Info().
+		Str("hash", b.Header.Hash().String()).
+		Uint32("height", b.Header.Height).
+		Int("transactions", len(b.Transactions)).
+		Msg("new block")
+
 	return nil
 }
 
+var (
+	ErrBlockKnown              = errors.New("block already have")
+	ErrBlockTooHigh            = errors.New("block too high")
+	ErrBlockPrevHeaderNotValid = errors.New("hash of prev block is invalid")
+)
+
 func (bc *chain) validateBlock(b *Block) error {
 	if b.Header.Height <= bc.currHeader.Height {
-		return errors.New("error known block")
+		return ErrBlockKnown
 	}
 
 	if b.Header.Height > bc.currHeader.Height+1 {
-		return errors.New("block too high")
+		return ErrBlockTooHigh
 	}
 
 	if !b.Header.PrevBlockHash.IsEqual(bc.currHeader.Hash()) {
-		return errors.New("hash of prev block is invalid")
+		return ErrBlockPrevHeaderNotValid
 	}
 
 	// TODO (@igumus): add check prev header hash with block prev header hash

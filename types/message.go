@@ -5,6 +5,10 @@ import (
 	"encoding/gob"
 )
 
+type RemoteMessageHandler interface {
+	HandleMessage(RemoteMessage) error
+}
+
 type MessageType byte
 
 type RemoteMessage struct {
@@ -30,19 +34,13 @@ const (
 	NetworkReserved_5     MessageType = 0x6
 
 	// chain message types
-
+	ChainTx    MessageType = 0x7
+	ChainBlock MessageType = 0x8
 )
 
 type Message struct {
 	Header MessageType
 	Data   []byte
-}
-
-func (m *Message) ToRemoteMessage(from PeerID) RemoteMessage {
-	return RemoteMessage{
-		From:    from,
-		Payload: m.Data,
-	}
 }
 
 func (m *Message) Bytes() ([]byte, error) {

@@ -36,23 +36,17 @@ type Block struct {
 }
 
 func GenesisBlock() (*Block, error) {
-	txs := []*Transaction{}
-	dataHash, err := calculateTransactionHash(txs...)
-	if err != nil {
-		return nil, err
-	}
-
 	header := &Header{
 		Version:       1,
 		Height:        0,
 		Timestamp:     000000000,
 		PrevBlockHash: hash.ZeroHash,
-		DataHash:      dataHash,
+		DataHash:      hash.ZeroHash,
 	}
 
 	block := &Block{
 		Header:       header,
-		Transactions: txs,
+		Transactions: nil,
 	}
 
 	return block, nil

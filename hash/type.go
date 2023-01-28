@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ZeroHash Hash = []byte{}
+	ZeroHash Hash = Hash(nil)
 
 	// Error Definitions
 	ErrHashNotVerified = errors.New("hash not verified")

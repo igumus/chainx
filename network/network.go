@@ -21,11 +21,13 @@ type Network interface {
 	Send(peer types.PeerID, msg *types.Message) error
 	Broadcast(msg *types.Message) error
 	io.Closer
+	types.RemoteMessageHandler
 }
 
 type network struct {
 	id        string
 	name      string
+	debug     bool
 	keypair   *crypto.KeyPair
 	logger    zerolog.Logger
 	seedNodes []string
@@ -42,13 +44,14 @@ type network struct {
 	pendingPeers map[types.PeerID]*peer
 }
 
-func NewNetwork(options ...NetworkOption) (Network, error) {
+func New(options ...NetworkOption) (Network, error) {
 	config, err := createOptions(options...)
 	if err != nil {
 		return nil, err
 	}
 
 	n := &network{
+		debug:        config.debug,
 		logger:       config.logger,
 		keypair:      config.keypair,
 		id:           config.id,
@@ -92,7 +95,7 @@ func (n *network) process() {
 		case peer := <-n.delPeerCh:
 			n.processPeerLeave(peer)
 		case rpc := <-n.rpcPeerCh:
-			n.processPeerMessage(rpc)
+			n.HandleMessage(rpc)
 		}
 	}
 }
@@ -129,35 +132,37 @@ func (n *network) processPeerLeave(peer Peer) {
 	n.lock.Unlock()
 }
 
-func (n *network) processPeerMessage(rpc types.RemoteMessage) {
+func (n *network) HandleMessage(rpc types.RemoteMessage) error {
 	message, err := rpc.Decode()
 	if err != nil {
-		n.logger.Error().Str("from", rpc.From.String()).Err(err).Msg("decoding remote message failed")
-		return
+		return err
 	}
 
 	switch message.Header {
 	case types.NetworkHandshake:
 		n.logger.Info().Str("from", rpc.From.String()).Msg("received new handshake message")
-		if err := n.processPeerHandshake(rpc.From, message.Data, false); err != nil {
-			n.logger.Error().Str("from", rpc.From.String()).Err(err).Msg("processing handshake message failed")
-		}
+		return n.processPeerHandshake(rpc.From, message.Data, false)
 	case types.NetworkHandshakeReply:
 		n.logger.Info().Str("from", rpc.From.String()).Msg("received handshake reply message")
-		if err := n.processPeerHandshake(rpc.From, message.Data, true); err != nil {
-			n.logger.Error().Str("from", rpc.From.String()).Err(err).Msg("processing handshake reply message failed")
-		}
+		return n.processPeerHandshake(rpc.From, message.Data, true)
 	case types.NetworkReserved_2:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_2").Msg("unhandled network message")
+		return nil
 	case types.NetworkReserved_3:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_3").Msg("unhandled network message")
+		return nil
 	case types.NetworkReserved_4:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_4").Msg("unhandled network message")
+		return nil
 	case types.NetworkReserved_5:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_5").Msg("unhandled network message")
+		return nil
 	default:
-		n.logger.Info().Str("from", rpc.From.String()).Msg("not a network message forwaring to message channel")
-		n.messageCh <- message.ToRemoteMessage(rpc.From)
+		if n.debug {
+			n.logger.Debug().Str("from", rpc.From.String()).Msg("forwarding non-network message to channel")
+		}
+		n.messageCh <- rpc
+		return nil
 	}
 }
 
