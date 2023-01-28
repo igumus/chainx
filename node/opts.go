@@ -13,6 +13,7 @@ import (
 type NodeOption func(*nodeOption)
 
 type nodeOption struct {
+	debugMode     bool
 	blockTime     time.Duration
 	network       network.Network
 	validatorNode bool
@@ -74,5 +75,11 @@ func EnableValidator() NodeOption {
 func WithKeypair(k *crypto.KeyPair) NodeOption {
 	return func(no *nodeOption) {
 		no.keypair = k
+	}
+}
+
+func WithDebugMode(b bool) NodeOption {
+	return func(no *nodeOption) {
+		no.debugMode = b
 	}
 }

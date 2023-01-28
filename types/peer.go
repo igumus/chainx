@@ -2,6 +2,10 @@ package types
 
 type PeerID string
 
+func (pid PeerID) String() string {
+	return string(pid)
+}
+
 type PeerState byte
 
 const (

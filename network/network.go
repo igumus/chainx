@@ -9,7 +9,7 @@ import (
 
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/types"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 )
 
 type Network interface {
@@ -27,6 +27,7 @@ type network struct {
 	id        string
 	name      string
 	keypair   *crypto.KeyPair
+	logger    zerolog.Logger
 	seedNodes []string
 	transport Transport
 	addPeerCh chan net.Conn
@@ -41,11 +42,18 @@ type network struct {
 	pendingPeers map[types.PeerID]*peer
 }
 
-func NewNetwork(key *crypto.KeyPair, options ...NetworkOption) (Network, error) {
+func NewNetwork(options ...NetworkOption) (Network, error) {
+	config, err := createOptions(options...)
+	if err != nil {
+		return nil, err
+	}
+
 	n := &network{
-		keypair:      key,
-		id:           key.Address().String(),
-		name:         key.Address().String(),
+		logger:       config.logger,
+		keypair:      config.keypair,
+		id:           config.id,
+		name:         config.name,
+		seedNodes:    config.nodes,
 		addPeerCh:    make(chan net.Conn),
 		delPeerCh:    make(chan *peer),
 		rpcPeerCh:    make(chan types.RemoteMessage, 1024),
@@ -54,29 +62,13 @@ func NewNetwork(key *crypto.KeyPair, options ...NetworkOption) (Network, error) 
 		pendingPeers: make(map[types.PeerID]*peer),
 	}
 
-	config, err := createOptions(options...)
+	tr, err := newTCPTransport(n.id, config.tcpTransport, n.addPeerCh)
 	if err != nil {
 		return nil, err
 	}
-	n.name = config.name
-	n.seedNodes = config.nodes
-
-	if err := n.createTCPTransport(config); err != nil {
-		return nil, err
-	}
-
-	return n, nil
-}
-
-func (n *network) createTCPTransport(config *netOptions) error {
-	tr, err := newTCPTransport(config.tcpTransport, n.addPeerCh)
-	if err != nil {
-		return err
-	}
-
 	n.transport = tr
 
-	return nil
+	return n, nil
 }
 
 func (n *network) bootstrap() {
@@ -84,19 +76,10 @@ func (n *network) bootstrap() {
 		go func(addr string) {
 			_, err := n.Dial(addr)
 			if err != nil {
-				logrus.WithFields(logrus.Fields{
-					"netID":      n.ID(),
-					"netName":    n.Name(),
-					"remoteAddr": addr,
-					"err":        err,
-				}).Error("failed to connect node")
-			} else {
-				logrus.WithFields(logrus.Fields{
-					"netID":      n.ID(),
-					"netName":    n.Name(),
-					"remoteAddr": addr,
-				}).Info("connection success to bootstrap node")
+				n.logger.Error().Str("remote", addr).Err(err)
+				return
 			}
+			n.logger.Info().Str("remote", addr).Msg("connected to seed node")
 		}(addr)
 	}
 }
@@ -115,11 +98,7 @@ func (n *network) process() {
 }
 
 func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
-	logrus.WithFields(logrus.Fields{
-		"netID":    n.ID(),
-		"netName":  n.Name(),
-		"peerAddr": conn.RemoteAddr(),
-	}).Info("peer joined to cluster")
+	n.logger.Info().Str("peerAddr", conn.RemoteAddr().String()).Msg("peer joined to cluster")
 
 	peer := &peer{
 		peerType: conn.LocalAddr().Network(),
@@ -131,10 +110,7 @@ func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
 	id := types.PeerID(conn.RemoteAddr().String())
 
 	n.pendingLock.Lock()
-	logrus.WithFields(logrus.Fields{
-		"peerAddr": id,
-		"count":    len(n.pendingPeers),
-	}).Info("peer added to pending list")
+	n.logger.Info().Str("peerAddr", conn.RemoteAddr().String()).Int("count", len(n.pendingPeers)).Msg("peer joined to cluster")
 	n.pendingPeers[id] = peer
 	go peer.readLoop(n.delPeerCh, n.rpcPeerCh)
 	n.pendingLock.Unlock()
@@ -145,18 +121,9 @@ func (n *network) processPeerLeave(peer Peer) {
 	n.lock.Lock()
 	err := peer.Close()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"netID":    n.ID(),
-			"netName":  n.Name(),
-			"peerAddr": peer.Addr(),
-			"err":      err,
-		}).Info("peer leaved from cluster failed")
+		n.logger.Error().Str("peerAddr", peer.Addr()).Err(err).Msg("closing peer failed")
 	} else {
-		logrus.WithFields(logrus.Fields{
-			"netID":    n.ID(),
-			"netName":  n.Name(),
-			"peerAddr": peer.Addr(),
-		}).Info("peer leaved from cluster")
+		n.logger.Info().Str("peerAddr", peer.Addr()).Msg("peer closed")
 	}
 	delete(n.peers, peer.ID())
 	n.lock.Unlock()
@@ -165,59 +132,31 @@ func (n *network) processPeerLeave(peer Peer) {
 func (n *network) processPeerMessage(rpc types.RemoteMessage) {
 	message, err := rpc.Decode()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"netID":   n.ID(),
-			"netName": n.Name(),
-			"from":    rpc.From,
-			"err":     err,
-		}).Error("decoding new message failed")
+		n.logger.Error().Str("from", rpc.From.String()).Err(err).Msg("decoding remote message failed")
 		return
 	}
 
 	switch message.Header {
 	case types.NetworkHandshake:
-		logrus.WithFields(logrus.Fields{
-			"netID":   n.ID(),
-			"netName": n.Name(),
-			"from":    rpc.From,
-		}).Info("received new handshake message")
+		n.logger.Info().Str("from", rpc.From.String()).Msg("received new handshake message")
 		if err := n.processPeerHandshake(rpc.From, message.Data, false); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"netID":   n.ID(),
-				"netName": n.Name(),
-				"from":    rpc.From,
-				"err":     err,
-			}).Error("processing handshake message failed")
+			n.logger.Error().Str("from", rpc.From.String()).Err(err).Msg("processing handshake message failed")
 		}
 	case types.NetworkHandshakeReply:
-		logrus.WithFields(logrus.Fields{
-			"netID":   n.ID(),
-			"netName": n.Name(),
-			"from":    rpc.From,
-		}).Info("received new handshake reply message")
+		n.logger.Info().Str("from", rpc.From.String()).Msg("received handshake reply message")
 		if err := n.processPeerHandshake(rpc.From, message.Data, true); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"netID":   n.ID(),
-				"netName": n.Name(),
-				"from":    rpc.From,
-				"err":     err,
-			}).Error("processing handshake reply message failed")
+			n.logger.Error().Str("from", rpc.From.String()).Err(err).Msg("processing handshake reply message failed")
 		}
 	case types.NetworkReserved_2:
+		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_2").Msg("unhandled network message")
 	case types.NetworkReserved_3:
+		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_3").Msg("unhandled network message")
 	case types.NetworkReserved_4:
+		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_4").Msg("unhandled network message")
 	case types.NetworkReserved_5:
-		logrus.WithFields(logrus.Fields{
-			"netID":   n.ID(),
-			"netName": n.Name(),
-			"from":    rpc.From,
-		}).Warn("received unhandled (but reserved) network message")
+		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_5").Msg("unhandled network message")
 	default:
-		logrus.WithFields(logrus.Fields{
-			"netID":   n.ID(),
-			"netName": n.Name(),
-			"from":    rpc.From,
-		}).Warn("received new non-networked type message")
+		n.logger.Info().Str("from", rpc.From.String()).Msg("not a network message forwaring to message channel")
 		n.messageCh <- message.ToRemoteMessage(rpc.From)
 	}
 }
@@ -238,7 +177,7 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 
 	n.pendingLock.Lock()
 	delete(n.pendingPeers, from)
-	logrus.WithField("count", len(n.pendingPeers)).Info("pending peer status")
+	n.logger.Info().Int("count", len(n.pendingPeers)).Msg("pending peers")
 	n.pendingLock.Unlock()
 
 	n.lock.Lock()
@@ -246,10 +185,7 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 	n.lock.Unlock()
 
 	if reply {
-		logrus.WithFields(logrus.Fields{
-			"fromNetID": n.ID(),
-			"toNetID":   peer.ID(),
-		}).Info("handshaked fully")
+		n.logger.Info().Str("toNet", peer.ID().String()).Msg("full handshake established")
 		return nil
 	}
 
@@ -293,7 +229,7 @@ func (n *network) Dial(addr string) (string, error) {
 
 	peer := n.processPeerJoin(conn, false)
 
-	logrus.WithField("addr", addr).Info("waiting one second to send handshake")
+	n.logger.Info().Str("addr", addr).Msg("waiting one second to send handshake")
 	time.Sleep(1 * time.Second)
 
 	handshake := &networkHandshakeMessage{
@@ -313,10 +249,7 @@ func (n *network) Dial(addr string) (string, error) {
 }
 
 func (n *network) Close() error {
-	logrus.WithFields(logrus.Fields{
-		"netID":   n.ID(),
-		"netName": n.Name(),
-	}).Info("shutting down network")
+	n.logger.Info().Msg("shutdown network")
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
@@ -355,11 +288,7 @@ func (n *network) Broadcast(msg *types.Message) error {
 	for _, peer := range n.peers {
 		go func(p Peer) {
 			if err := p.Send(dmsg); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"netID": n.ID(),
-					"peer":  p.ID(),
-					"err":   err,
-				}).Error("sending broadcast message failed")
+				n.logger.Error().Str("peer", p.ID().String()).Err(err).Msg("sending broadcast message failed")
 			}
 		}(peer)
 	}

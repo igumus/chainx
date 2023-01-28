@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 )
 
 func createHash(v hashVersion, alg HashAlgorithm, data []byte) Hash {
@@ -12,7 +12,9 @@ func createHash(v hashVersion, alg HashAlgorithm, data []byte) Hash {
 
 	hasher = hasherFactory(alg)
 	if hasher == nil {
-		logrus.WithField("algorithm", alg).Error("unknown hash algorithm using default sha256")
+		if e := log.Logger.Debug(); e.Enabled() {
+			log.Debug().Msg("unknown hash algorithm using default sha256")
+		}
 		hasher = defaultHasher
 	}
 
@@ -54,10 +56,7 @@ func decode(data []byte) (hashVersion, HashAlgorithm, error) {
 func FromHexString(s string) (Hash, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"hex":   s,
-			"cause": err,
-		}).Error("decoding hex string failed")
+		log.Error().Str("hex", s).Err(err).Msg("decoding hex failed")
 		return ZeroHash, ErrMalformedHash
 	}
 

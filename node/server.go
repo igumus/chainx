@@ -16,6 +16,7 @@ type Node interface {
 
 type node struct {
 	id        string
+	debug     bool
 	validator bool
 	blockTime time.Duration
 	keypair   *crypto.KeyPair
@@ -47,6 +48,7 @@ func New(opts ...NodeOption) (Node, error) {
 		id:        options.keypair.Address().String(),
 		keypair:   options.keypair,
 		logger:    options.logger,
+		debug:     options.debugMode,
 		validator: options.validatorNode,
 		blockTime: options.blockTime,
 		txpool:    txpool,

@@ -33,38 +33,17 @@ func main() {
 	name := fmt.Sprintf("NODE_%s", *seq)
 	addr := fmt.Sprintf(":300%s", *seq)
 
-	network, err := network.NewNetwork(key,
-		network.WithName(name),
+	network, err := network.NewNetwork(
+		network.WithKeyPair(key),
 		network.WithTCPTransport(addr),
-		network.WithBootstrapNode(*bootstrapnode))
+		network.WithSeedNode(*bootstrapnode),
+		network.WithName(name),
+		network.WithDebugMode(*debug),
+	)
 	if err != nil {
 		log.Panic().Err(err)
 	}
 
 	network.Start()
 	select {}
-	/*
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-
-		trLocal := network.NewLocalTransport("LOCAL")
-		trRemote := network.NewLocalTransport("REMOTE")
-
-		trLocal.Connect(trRemote)
-		trRemote.Connect(trLocal)
-
-		server, err := node.NewServer(trLocal, trRemote)
-		if err != nil {
-			logrus.WithField("cause", err).Fatal("server instance creation failed")
-		}
-
-		go func() {
-			for {
-				trLocal.SendMessage(trRemote.Addr(), []byte("hello world"))
-				time.Sleep(1 * time.Second)
-			}
-		}()
-
-		server.Start(ctx)
-	*/
 }

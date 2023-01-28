@@ -4,19 +4,27 @@ import (
 	"net"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type tcp struct {
 	listenAddr string
 	listener   net.Listener
 	addPeerCh  chan<- net.Conn
+	logger     zerolog.Logger
 }
 
-func newTCPTransport(addr string, addCh chan<- net.Conn) (Transport, error) {
+func newTCPTransport(id string, addr string, addCh chan<- net.Conn) (Transport, error) {
 	t := &tcp{
 		listenAddr: addr,
 		addPeerCh:  addCh,
+		logger: log.With().
+			Str("id", id).
+			Str("component", "transport").
+			Str("type", "tcp").
+			Str("addr", addr).
+			Logger(),
 	}
 
 	return t, nil
@@ -26,11 +34,7 @@ func (t *tcp) acceptLoop() {
 	for {
 		conn, err := t.listener.Accept()
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"type": t.Type(),
-				"addr": t.listenAddr,
-				"err":  err,
-			}).Error("accepting connection failed")
+			t.logger.Error().Err(err).Msg("accepting incoming connection failed")
 			continue
 		}
 		t.addPeerCh <- conn
@@ -46,16 +50,13 @@ func (t *tcp) Addr() string {
 }
 
 func (t *tcp) Listen() error {
-	ln, err := net.Listen("tcp", t.listenAddr)
+	ln, err := net.Listen(t.Type(), t.listenAddr)
 	if err != nil {
 		return err
 	}
 	t.listener = ln
 
-	logrus.WithFields(logrus.Fields{
-		"type": "tcp",
-		"addr": t.listenAddr,
-	}).Info("transport started")
+	t.logger.Info().Msg("transport started")
 
 	go t.acceptLoop()
 
@@ -63,13 +64,10 @@ func (t *tcp) Listen() error {
 }
 
 func (t *tcp) Dial(addr string) (net.Conn, error) {
-	return net.DialTimeout("tcp", addr, 1*time.Second)
+	return net.DialTimeout(t.Type(), addr, 1*time.Second)
 }
 
 func (t *tcp) Close() error {
-	logrus.WithFields(logrus.Fields{
-		"type": "tcp",
-		"addr": t.listenAddr,
-	}).Info("closing transport")
+	t.logger.Info().Msg("closing transport")
 	return t.listener.Close()
 }

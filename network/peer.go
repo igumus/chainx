@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/igumus/chainx/types"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 )
 
 type Peer interface {
@@ -39,11 +39,7 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 			if err == io.EOF {
 				break
 			}
-			logrus.WithFields(logrus.Fields{
-				"type": p.Type(),
-				"addr": p.Addr(),
-				"err":  err,
-			}).Error("reading from peer failed")
+			log.Error().Err(err).Str("type", p.Type()).Str("addr", p.Addr()).Msg("reading from peer failed")
 			continue
 		}
 		buf = new(bytes.Buffer)
@@ -52,19 +48,13 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 			if err == io.EOF {
 				break
 			}
-			logrus.WithFields(logrus.Fields{
-				"type": p.Type(),
-				"addr": p.Addr(),
-				"err":  err,
-			}).Error("copying from peer failed")
+			log.Error().Err(err).Str("type", p.Type()).Str("addr", p.Addr()).Msg("copying from peer failed")
 			continue
 		}
 
-		logrus.WithFields(logrus.Fields{
-			"type":      p.Type(),
-			"addr":      p.Addr(),
-			"readBytes": n,
-		}).Debug("incoming message accepted")
+		if e := log.Debug(); e.Enabled() {
+			log.Debug().Str("type", p.Type()).Str("addr", p.Addr()).Int64("readBytes", n).Msg("incoming message accepted")
+		}
 
 		from := p.ID()
 		if p.state == types.PendingPeer {
@@ -83,10 +73,7 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 func (p *peer) handshake(id string) {
 	p.id = id
 	p.state = types.HandshakedPeer
-	logrus.WithFields(logrus.Fields{
-		"peer": p.id,
-		"addr": p.conn.RemoteAddr().String(),
-	}).Info("changed peer state to handshaked")
+	log.Info().Str("peer", p.id).Str("addr", p.conn.RemoteAddr().String()).Msg("changed peer state to handshaked")
 }
 
 func (p *peer) IsOutgoing() bool {

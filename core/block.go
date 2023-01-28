@@ -7,7 +7,6 @@ import (
 
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/hash"
-	"github.com/sirupsen/logrus"
 )
 
 var ErrInvalidDataHash = errors.New("block has invalid data hash")
@@ -85,10 +84,6 @@ func (b *Block) Sign(kp *crypto.KeyPair) error {
 	data := b.Header.Hash()
 	signature, err := kp.Sign(data)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"block": data,
-			"cause": err,
-		}).Error("block sign")
 		return err
 	}
 	b.Signature = signature
@@ -98,28 +93,14 @@ func (b *Block) Sign(kp *crypto.KeyPair) error {
 func (b *Block) Verify() error {
 	data := b.Header.Hash()
 	if err := b.Signature.Verify(data); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"block": data,
-			"phase": "signature verify",
-			"cause": err,
-		}).Error("block verification failed")
 		return err
 	}
 	datahash, err := calculateTransactionHash(b.Transactions...)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"block": data,
-			"phase": "calculate tx hash",
-			"cause": err,
-		}).Error("block verification failed")
 		return err
 	}
 
 	if !b.Header.DataHash.IsEqual(datahash) {
-		logrus.WithFields(logrus.Fields{
-			"block": data,
-			"phase": "datahash verification",
-		}).Error("block verification failed")
 		return ErrInvalidDataHash
 	}
 	return nil
