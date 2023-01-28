@@ -33,6 +33,11 @@ func TestZeroHash(t *testing.T) {
 			isZero: true,
 		},
 		{
+			name:   "check-zero-hash-empty-bytes",
+			hash:   []byte{},
+			isZero: true,
+		},
+		{
 			name:   "check-non-zero-hash",
 			hash:   createHash(version_1, Sha2_256, []byte("hello world")),
 			isZero: false,

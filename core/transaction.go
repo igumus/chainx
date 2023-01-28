@@ -10,6 +10,29 @@ import (
 type Transaction struct {
 	Data      []byte
 	Signature *crypto.Signature
+
+	// cache purpose
+	txhash hash.Hash
+
+	// transaction order no for locally
+	localOrder int64
+}
+
+func NewTransaction(data []byte) *Transaction {
+	return &Transaction{
+		Data:   data,
+		txhash: []byte{},
+	}
+}
+
+func (tx *Transaction) Hash() hash.Hash {
+	if tx.txhash.IsZero() {
+		// calculate hash
+		buf := new(bytes.Buffer)
+		EncodeTransaction(buf, tx)
+		tx.txhash = hash.CreateHash(buf.Bytes())
+	}
+	return tx.txhash
 }
 
 func (t *Transaction) Sign(kp *crypto.KeyPair) error {
@@ -28,9 +51,9 @@ func (t *Transaction) Verify() error {
 func calculateTransactionHash(txs ...*Transaction) (hash.Hash, error) {
 	buf := new(bytes.Buffer)
 	for _, tx := range txs {
-        if err := tx.Verify(); err != nil {
-            return hash.ZeroHash, err
-        }
+		if err := tx.Verify(); err != nil {
+			return hash.ZeroHash, err
+		}
 		if err := EncodeTransaction(buf, tx); err != nil {
 			return hash.ZeroHash, err
 		}

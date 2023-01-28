@@ -36,6 +36,29 @@ type Block struct {
 	Signature    *crypto.Signature
 }
 
+func GenesisBlock() (*Block, error) {
+	txs := []*Transaction{}
+	dataHash, err := calculateTransactionHash(txs...)
+	if err != nil {
+		return nil, err
+	}
+
+	header := &Header{
+		Version:       1,
+		Height:        0,
+		Timestamp:     000000000,
+		PrevBlockHash: hash.ZeroHash,
+		DataHash:      dataHash,
+	}
+
+	block := &Block{
+		Header:       header,
+		Transactions: txs,
+	}
+
+	return block, nil
+}
+
 func NewBlock(prevHeader *Header, txs []*Transaction) (*Block, error) {
 	dataHash, err := calculateTransactionHash(txs...)
 	if err != nil {
