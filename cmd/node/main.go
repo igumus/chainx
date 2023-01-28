@@ -74,7 +74,7 @@ func main() {
 	go server.Start()
 
 	go func() {
-		time.Sleep(3 * time.Second)
+		time.Sleep(6 * time.Second)
 		size := 10
 		for i := 0; i < size; i++ {
 			sendTransaction(key, network, i)
@@ -85,7 +85,7 @@ func main() {
 }
 
 func sendTransaction(k *crypto.KeyPair, n network.Network, idx int) {
-	data := []byte(fmt.Sprintf("foo_%d", idx))
+	data := []byte(fmt.Sprintf("foo_%d", time.Now().UnixNano()))
 	tx := core.NewTransaction(data)
 	tx.Sign(k)
 

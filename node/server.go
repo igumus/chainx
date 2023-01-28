@@ -95,12 +95,15 @@ func (n *node) createBlock() error {
 
 	n.txpool.Flush()
 
-	go n.broadcastBlock(block)
+	if err := n.broadcastBlock("", block); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
+	n.logger.Info().Str("peer", peer.String()).Str("bHash", block.Header.Hash().String()).Msg("new block arrived")
 	if err := n.chain.AddBlock(block); err != nil {
 		if err == core.ErrBlockTooHigh {
 			n.logger.Info().Str("peer", peer.String()).Uint32("ownHeight", n.chain.CurrentHeader().Height).Uint32("blockHeight", block.Header.Height).Msg("should get non existing block(s)")
@@ -112,13 +115,17 @@ func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
 		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("processing block failed")
 		return err
 	}
+	n.logger.Info().Str("peer", peer.String()).Str("bHash", block.Header.Hash().String()).Msg("new block saved")
 
-	go n.broadcastBlock(block)
+	if err := n.broadcastBlock(peer, block); err != nil {
+		n.logger.Error().Err(err).Msg("broadcasting block failed")
+		return err
+	}
 
 	return nil
 }
 
-func (n *node) broadcastBlock(block *core.Block) error {
+func (n *node) broadcastBlock(from types.PeerID, block *core.Block) error {
 	buf := new(bytes.Buffer)
 	if err := core.EncodeBlock(buf, block); err != nil {
 		return err
@@ -129,25 +136,24 @@ func (n *node) broadcastBlock(block *core.Block) error {
 		Data:   buf.Bytes(),
 	}
 
-	if err := n.network.Broadcast(message); err != nil {
+	if err := n.network.Broadcast(message, from); err != nil {
 		n.logger.Error().Err(err).Msg("broadcasting block failed")
 		return err
 	}
 	return nil
 }
 
-// TODO (@igumus): should avoid infinite tx broadcasting
 func (n *node) processTransaction(peer types.PeerID, tx *core.Transaction) error {
 	if err := n.txpool.Add(tx); err != nil {
 		return err
 	}
 
-	go n.broadcastTransaction(tx)
+	go n.broadcastTransaction(peer, tx)
 
 	return nil
 }
 
-func (n *node) broadcastTransaction(tx *core.Transaction) error {
+func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) error {
 	buf := new(bytes.Buffer)
 	if err := core.EncodeTransaction(buf, tx); err != nil {
 		return err
@@ -158,7 +164,7 @@ func (n *node) broadcastTransaction(tx *core.Transaction) error {
 		Data:   buf.Bytes(),
 	}
 
-	if err := n.network.Broadcast(message); err != nil {
+	if err := n.network.Broadcast(message, from); err != nil {
 		n.logger.Error().Err(err).Msg("broadcasting block failed")
 		return err
 	}

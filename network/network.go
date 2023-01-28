@@ -19,7 +19,7 @@ type Network interface {
 	Dial(addr string) (string, error)
 	Consume() <-chan types.RemoteMessage
 	Send(peer types.PeerID, msg *types.Message) error
-	Broadcast(msg *types.Message) error
+	Broadcast(msg *types.Message, sender types.PeerID) error
 	io.Closer
 	types.RemoteMessageHandler
 }
@@ -282,7 +282,7 @@ func (n *network) Send(to types.PeerID, msg *types.Message) error {
 	return peer.Send(dmsg)
 }
 
-func (n *network) Broadcast(msg *types.Message) error {
+func (n *network) Broadcast(msg *types.Message, sender types.PeerID) error {
 	dmsg, err := msg.Bytes()
 	if err != nil {
 		return err
@@ -290,12 +290,18 @@ func (n *network) Broadcast(msg *types.Message) error {
 
 	n.lock.RLock()
 	defer n.lock.RUnlock()
-	for _, peer := range n.peers {
-		go func(p Peer) {
-			if err := p.Send(dmsg); err != nil {
-				n.logger.Error().Str("peer", p.ID().String()).Err(err).Msg("sending broadcast message failed")
-			}
-		}(peer)
+	for id, peer := range n.peers {
+		if id != sender {
+			go func(p Peer) {
+				if err := p.Send(dmsg); err != nil {
+					n.logger.Error().Str("peer", p.ID().String()).Err(err).Msg("sending broadcast message failed")
+					return
+				}
+				if n.debug {
+					n.logger.Debug().Str("peer", p.ID().String()).Uint8("header", uint8(msg.Header)).Msg("broadcasted message")
+				}
+			}(peer)
+		}
 	}
 	return nil
 }
