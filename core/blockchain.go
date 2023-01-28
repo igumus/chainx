@@ -3,11 +3,13 @@ package core
 import (
 	"errors"
 	"sync"
+
+	"github.com/igumus/chainx/crypto"
 )
 
 type BlockChain interface {
-	CurrentHeader() (*Header, error)
-	AddBlock(*Block) error
+	CurrentHeader() *Header
+	AddBlock(*crypto.KeyPair, []*Transaction) error
 }
 
 type chain struct {
@@ -32,13 +34,23 @@ func NewBlockChain() (BlockChain, error) {
 	return bc, bc.addBlock(genesis)
 }
 
-func (bc *chain) CurrentHeader() (*Header, error) {
+func (bc *chain) CurrentHeader() *Header {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
-	return bc.currHeader, nil
+	return bc.currHeader
 }
 
-func (bc *chain) AddBlock(b *Block) error {
+func (bc *chain) AddBlock(key *crypto.KeyPair, txs []*Transaction) error {
+	b, err := NewBlock(bc.CurrentHeader(), txs)
+	if err != nil {
+		return err
+	}
+
+	err = b.Sign(key)
+	if err != nil {
+		return err
+	}
+
 	if err := bc.validateBlock(b); err != nil {
 		return err
 	}
