@@ -10,6 +10,7 @@ import (
 
 type BlockChain interface {
 	CurrentHeader() *Header
+	GetBlocks(uint32) ([]*Block, error)
 	CreateBlock(*crypto.KeyPair, []*Transaction) (*Block, error)
 	AddBlock(*Block) error
 }
@@ -34,6 +35,11 @@ func NewBlockChain() (BlockChain, error) {
 	}
 
 	return bc, bc.addBlock(genesis)
+}
+func (bc *chain) GetBlocks(from uint32) ([]*Block, error) {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+	return bc.storage.GetAll(from, bc.currHeader.Height)
 }
 
 func (bc *chain) CurrentHeader() *Header {

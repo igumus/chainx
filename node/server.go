@@ -2,6 +2,7 @@ package node
 
 import (
 	"bytes"
+	"encoding/gob"
 	"time"
 
 	"github.com/igumus/chainx/core"
@@ -17,7 +18,7 @@ type Node interface {
 }
 
 type node struct {
-	id        string
+	id        types.PeerID
 	debug     bool
 	validator bool
 	blockTime time.Duration
@@ -37,7 +38,6 @@ func New(opts ...NodeOption) (Node, error) {
 	}
 
 	n := &node{
-		id:        options.keypair.Address().String(),
 		keypair:   options.keypair,
 		logger:    options.logger,
 		debug:     options.debugMode,
@@ -46,6 +46,7 @@ func New(opts ...NodeOption) (Node, error) {
 		txpool:    options.pool,
 		chain:     options.chain,
 		network:   options.network,
+		id:        types.PeerID(options.network.ID()),
 		messageCh: options.network.Consume(),
 		quitCh:    make(chan struct{}, 1),
 	}
@@ -80,12 +81,6 @@ free:
 func (n *node) createBlock() error {
 	txs := n.txpool.Transactions()
 	pendingSize := len(txs)
-	if pendingSize == 0 {
-		if n.debug {
-			n.logger.Debug().Int("pendingTXcount", pendingSize).Msg("skipping block creation")
-		}
-		return nil
-	}
 
 	n.logger.Info().Int("pendingTXcount", pendingSize).Msg("try to create block with txs")
 	block, err := n.chain.CreateBlock(n.keypair, txs)
@@ -102,11 +97,29 @@ func (n *node) createBlock() error {
 	return nil
 }
 
+func (n *node) fetchBlock(peer types.PeerID, remoteHeight uint32) error {
+	n.logger.Info().Str("peer", peer.String()).Uint32("ownHeight", n.chain.CurrentHeader().Height).Uint32("blockHeight", remoteHeight).Msg("fetching blocks")
+
+	nextHeight := n.chain.CurrentHeader().Height + 1
+	msg, err := NewFetchBlockMessage(types.PeerID(n.id), nextHeight, remoteHeight)
+	if err != nil {
+		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("creating fetch message failed")
+		return err
+	}
+
+	if err := n.network.Send(peer, msg); err != nil {
+		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("sending fetch message failed")
+		return err
+	}
+
+	return nil
+}
+
 func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
 	n.logger.Info().Str("peer", peer.String()).Str("bHash", block.Header.Hash().String()).Msg("new block arrived")
 	if err := n.chain.AddBlock(block); err != nil {
 		if err == core.ErrBlockTooHigh {
-			n.logger.Info().Str("peer", peer.String()).Uint32("ownHeight", n.chain.CurrentHeader().Height).Uint32("blockHeight", block.Header.Height).Msg("should get non existing block(s)")
+			go n.fetchBlock(peer, block.Header.Height)
 			return nil
 		}
 		if err == core.ErrBlockKnown {
@@ -171,6 +184,42 @@ func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) err
 	return nil
 }
 
+func (n *node) processBlockFetch(peer types.PeerID, payload *FetchBlockMessage) error {
+	blocks, err := n.chain.GetBlocks(payload.From)
+	if err != nil {
+		n.logger.Error().Err(err).Str("peer", peer.String()).Uint32("fetchBlockFrom", payload.From).Msg("fetching block from chain failed")
+		return err
+	}
+
+	reply, err := NewFetchBlockReply(blocks)
+	if err != nil {
+		n.logger.Error().Err(err).Str("peer", peer.String()).Msg("creating fetch block reply message failed")
+		return err
+	}
+
+	if err := n.network.Send(peer, reply); err != nil {
+		n.logger.Error().Err(err).Str("peer", peer.String()).Msg("sending reply message to peer failed")
+		return err
+	}
+
+	n.logger.Info().Int("blockCount", len(blocks)).Str("peer", peer.String()).Msg("fetch block reply sent")
+
+	return nil
+}
+
+func (n *node) processSyncBlock(peer types.PeerID, payload *FetchBlockReply) error {
+	n.logger.Info().Str("from", peer.String()).Int("count", len(payload.Blocks)).Msg("sync blocks arrived")
+
+	for _, block := range payload.Blocks {
+		if err := n.chain.AddBlock(block); err != nil {
+			n.logger.Error().Err(err).Msg("sync block failed")
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (n *node) HandleMessage(msg types.RemoteMessage) error {
 	decodedMessage, err := msg.Decode()
 	if err != nil {
@@ -193,6 +242,18 @@ func (n *node) HandleMessage(msg types.RemoteMessage) error {
 			return err
 		}
 		return n.processBlock(peer, data)
+	case types.ChainFetchBlock:
+		data := &FetchBlockMessage{}
+		if err := gob.NewDecoder(payload).Decode(data); err != nil {
+			return err
+		}
+		return n.processBlockFetch(peer, data)
+	case types.ChainFetchBlockReply:
+		data := &FetchBlockReply{}
+		if err := gob.NewDecoder(payload).Decode(data); err != nil {
+			return err
+		}
+		return n.processSyncBlock(peer, data)
 	default:
 		n.logger.Error().Str("peer", peer.String()).Msg("unknown chain message header")
 	}

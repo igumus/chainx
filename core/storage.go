@@ -8,6 +8,7 @@ import (
 type Storage interface {
 	Put(*Block) error
 	Get(height uint32) (*Block, error)
+	GetAll(uint32, uint32) ([]*Block, error)
 }
 
 type memoryStorage struct {
@@ -21,6 +22,16 @@ func NewMemoryStorage() Storage {
 		headers: []*Header{},
 		blocks:  []*Block{},
 	}
+}
+
+func (ms *memoryStorage) GetAll(from uint32, to uint32) ([]*Block, error) {
+	ms.lock.RLock()
+	defer ms.lock.RUnlock()
+	result := []*Block{}
+	for i := from; i < to+1; i++ {
+		result = append(result, ms.blocks[i])
+	}
+	return result, nil
 }
 
 func (ms *memoryStorage) Put(b *Block) error {

@@ -34,8 +34,11 @@ const (
 	NetworkReserved_5     MessageType = 0x6
 
 	// chain message types
-	ChainTx    MessageType = 0x7
-	ChainBlock MessageType = 0x8
+	ChainState           MessageType = 0x7
+	ChainTx              MessageType = 0x8
+	ChainBlock           MessageType = 0x9
+	ChainFetchBlock      MessageType = 0xa
+	ChainFetchBlockReply MessageType = 0xb
 )
 
 type Message struct {
