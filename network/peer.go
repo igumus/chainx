@@ -27,7 +27,7 @@ type peer struct {
 	incoming bool
 }
 
-func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
+func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- RemoteMessage) {
 	var (
 		size int64 = 0
 		buf  *bytes.Buffer
@@ -61,7 +61,7 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 			from = types.PeerID(p.Addr())
 		}
 
-		rpcCh <- types.RemoteMessage{
+		rpcCh <- RemoteMessage{
 			From:    from,
 			Payload: buf.Bytes(),
 		}

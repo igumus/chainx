@@ -14,7 +14,7 @@ import (
 
 type Node interface {
 	Start()
-	types.RemoteMessageHandler
+	network.RemoteMessageHandler
 }
 
 type node struct {
@@ -27,7 +27,7 @@ type node struct {
 	chain     core.BlockChain
 	network   network.Network
 	logger    zerolog.Logger
-	messageCh <-chan types.RemoteMessage
+	messageCh <-chan network.RemoteMessage
 	quitCh    chan struct{}
 }
 
@@ -144,8 +144,8 @@ func (n *node) broadcastBlock(from types.PeerID, block *core.Block) error {
 		return err
 	}
 
-	message := &types.Message{
-		Header: types.ChainBlock,
+	message := &network.Message{
+		Header: network.ChainBlock,
 		Data:   buf.Bytes(),
 	}
 
@@ -172,8 +172,8 @@ func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) err
 		return err
 	}
 
-	message := &types.Message{
-		Header: types.ChainTx,
+	message := &network.Message{
+		Header: network.ChainTx,
 		Data:   buf.Bytes(),
 	}
 
@@ -220,7 +220,7 @@ func (n *node) processSyncBlock(peer types.PeerID, payload *FetchBlockReply) err
 	return nil
 }
 
-func (n *node) HandleMessage(msg types.RemoteMessage) error {
+func (n *node) HandleMessage(msg network.RemoteMessage) error {
 	decodedMessage, err := msg.Decode()
 	if err != nil {
 		return err
@@ -230,25 +230,25 @@ func (n *node) HandleMessage(msg types.RemoteMessage) error {
 	payload := bytes.NewReader(decodedMessage.Data)
 
 	switch decodedMessage.Header {
-	case types.ChainTx:
+	case network.ChainTx:
 		data := &core.Transaction{}
 		if err := core.DecodeTransaction(payload, data); err != nil {
 			return err
 		}
 		return n.processTransaction(peer, data)
-	case types.ChainBlock:
+	case network.ChainBlock:
 		data := &core.Block{}
 		if err := core.DecodeBlock(payload, data); err != nil {
 			return err
 		}
 		return n.processBlock(peer, data)
-	case types.ChainFetchBlock:
+	case network.ChainFetchBlock:
 		data := &FetchBlockMessage{}
 		if err := gob.NewDecoder(payload).Decode(data); err != nil {
 			return err
 		}
 		return n.processBlockFetch(peer, data)
-	case types.ChainFetchBlockReply:
+	case network.ChainFetchBlockReply:
 		data := &FetchBlockReply{}
 		if err := gob.NewDecoder(payload).Decode(data); err != nil {
 			return err

@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 
 	"github.com/igumus/chainx/core"
+	"github.com/igumus/chainx/network"
 	"github.com/igumus/chainx/types"
 )
 
@@ -14,7 +15,7 @@ type ChainStateMessage struct {
 	Height  uint32
 }
 
-func NewChainStateMessage(id types.PeerID, version uint32, height uint32) (*types.Message, error) {
+func NewChainStateMessage(id types.PeerID, version uint32, height uint32) (*network.Message, error) {
 	msg := &ChainStateMessage{
 		ID:      id,
 		Version: version,
@@ -31,13 +32,13 @@ func (m ChainStateMessage) Bytes() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (m ChainStateMessage) ToMessage() (*types.Message, error) {
+func (m ChainStateMessage) ToMessage() (*network.Message, error) {
 	data, err := m.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	return &types.Message{
-		Header: types.ChainState,
+	return &network.Message{
+		Header: network.ChainState,
 		Data:   data,
 	}, nil
 }
@@ -48,7 +49,7 @@ type FetchBlockMessage struct {
 	To   uint32
 }
 
-func NewFetchBlockMessage(id types.PeerID, from uint32, to uint32) (*types.Message, error) {
+func NewFetchBlockMessage(id types.PeerID, from uint32, to uint32) (*network.Message, error) {
 	msg := &FetchBlockMessage{
 		ID:   id,
 		From: from,
@@ -65,13 +66,13 @@ func (m FetchBlockMessage) Bytes() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (m FetchBlockMessage) ToMessage() (*types.Message, error) {
+func (m FetchBlockMessage) ToMessage() (*network.Message, error) {
 	data, err := m.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	return &types.Message{
-		Header: types.ChainFetchBlock,
+	return &network.Message{
+		Header: network.ChainFetchBlock,
 		Data:   data,
 	}, nil
 }
@@ -80,7 +81,7 @@ type FetchBlockReply struct {
 	Blocks []*core.Block
 }
 
-func NewFetchBlockReply(blocks []*core.Block) (*types.Message, error) {
+func NewFetchBlockReply(blocks []*core.Block) (*network.Message, error) {
 	msg := &FetchBlockReply{
 		Blocks: blocks,
 	}
@@ -95,13 +96,13 @@ func (m FetchBlockReply) Bytes() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (m FetchBlockReply) ToMessage() (*types.Message, error) {
+func (m FetchBlockReply) ToMessage() (*network.Message, error) {
 	data, err := m.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	return &types.Message{
-		Header: types.ChainFetchBlockReply,
+	return &network.Message{
+		Header: network.ChainFetchBlockReply,
 		Data:   data,
 	}, nil
 }

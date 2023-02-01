@@ -97,8 +97,8 @@ func sendTransaction(k *crypto.KeyPair, n network.Network) {
 		return
 	}
 
-	message := &types.Message{
-		Header: types.ChainTx,
+	message := &network.Message{
+		Header: network.ChainTx,
 		Data:   buf.Bytes(),
 	}
 
@@ -108,7 +108,7 @@ func sendTransaction(k *crypto.KeyPair, n network.Network) {
 		return
 	}
 
-	remote := types.RemoteMessage{
+	remote := network.RemoteMessage{
 		From:    types.PeerID(k.Address().String()),
 		Payload: mbuf,
 	}

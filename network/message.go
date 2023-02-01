@@ -7,70 +7,51 @@ import (
 	"github.com/igumus/chainx/types"
 )
 
-type networkHandshakeMessage struct {
-	Id   string
-	Addr string
+type RemoteMessageHandler interface {
+	HandleMessage(RemoteMessage) error
 }
 
-func (n *networkHandshakeMessage) encode() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	if err := gob.NewEncoder(buf).Encode(n); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+type RemoteMessage struct {
+	From    types.PeerID
+	Payload []byte
 }
 
-func (n *networkHandshakeMessage) message() ([]byte, error) {
-	data, err := n.encode()
-	if err != nil {
-		return nil, err
-	}
-	msg := &types.Message{
-		Header: types.NetworkHandshake,
-		Data:   data,
-	}
-
-	return msg.Bytes()
-}
-
-func decodeHandshakeMessage(data []byte) (*networkHandshakeMessage, error) {
-	msg := &networkHandshakeMessage{}
-	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(msg); err != nil {
+func (m RemoteMessage) Decode() (*Message, error) {
+	msg := &Message{}
+	if err := gob.NewDecoder(bytes.NewReader(m.Payload)).Decode(msg); err != nil {
 		return nil, err
 	}
 	return msg, nil
 }
 
-type networkHandshakeReplyMessage struct {
-	Id   string
-	Addr string
+type MessageType byte
+
+const (
+	// network message types
+	NetworkHandshake      MessageType = 0x1
+	NetworkHandshakeReply MessageType = 0x2
+	NetworkReserved_2     MessageType = 0x3
+	NetworkReserved_3     MessageType = 0x4
+	NetworkReserved_4     MessageType = 0x5
+	NetworkReserved_5     MessageType = 0x6
+
+	// chain message types
+	ChainState           MessageType = 0x7
+	ChainTx              MessageType = 0x8
+	ChainBlock           MessageType = 0x9
+	ChainFetchBlock      MessageType = 0xa
+	ChainFetchBlockReply MessageType = 0xb
+)
+
+type Message struct {
+	Header MessageType
+	Data   []byte
 }
 
-func (n *networkHandshakeReplyMessage) encode() ([]byte, error) {
+func (m *Message) Bytes() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	if err := gob.NewEncoder(buf).Encode(n); err != nil {
+	if err := gob.NewEncoder(buf).Encode(m); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-func (n *networkHandshakeReplyMessage) message() ([]byte, error) {
-	data, err := n.encode()
-	if err != nil {
-		return nil, err
-	}
-	msg := &types.Message{
-		Header: types.NetworkHandshakeReply,
-		Data:   data,
-	}
-
-	return msg.Bytes()
-}
-
-func decodeHandshakeReplyMessage(data []byte) (*networkHandshakeReplyMessage, error) {
-	msg := &networkHandshakeReplyMessage{}
-	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(msg); err != nil {
-		return nil, err
-	}
-	return msg, nil
 }
