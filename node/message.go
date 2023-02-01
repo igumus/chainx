@@ -6,16 +6,15 @@ import (
 
 	"github.com/igumus/chainx/core"
 	"github.com/igumus/chainx/network"
-	"github.com/igumus/chainx/types"
 )
 
 type ChainStateMessage struct {
-	ID      types.PeerID
+	ID      network.PeerID
 	Version uint32
 	Height  uint32
 }
 
-func NewChainStateMessage(id types.PeerID, version uint32, height uint32) (*network.Message, error) {
+func NewChainStateMessage(id network.PeerID, version uint32, height uint32) (*network.Message, error) {
 	msg := &ChainStateMessage{
 		ID:      id,
 		Version: version,
@@ -44,12 +43,12 @@ func (m ChainStateMessage) ToMessage() (*network.Message, error) {
 }
 
 type FetchBlockMessage struct {
-	ID   types.PeerID
+	ID   network.PeerID
 	From uint32
 	To   uint32
 }
 
-func NewFetchBlockMessage(id types.PeerID, from uint32, to uint32) (*network.Message, error) {
+func NewFetchBlockMessage(id network.PeerID, from uint32, to uint32) (*network.Message, error) {
 	msg := &FetchBlockMessage{
 		ID:   id,
 		From: from,

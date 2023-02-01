@@ -8,7 +8,6 @@ import (
 	"github.com/igumus/chainx/core"
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/network"
-	"github.com/igumus/chainx/types"
 	"github.com/rs/zerolog"
 )
 
@@ -18,7 +17,7 @@ type Node interface {
 }
 
 type node struct {
-	id        types.PeerID
+	id        network.PeerID
 	debug     bool
 	validator bool
 	blockTime time.Duration
@@ -46,7 +45,7 @@ func New(opts ...NodeOption) (Node, error) {
 		txpool:    options.pool,
 		chain:     options.chain,
 		network:   options.network,
-		id:        types.PeerID(options.network.ID()),
+		id:        network.PeerID(options.network.ID()),
 		messageCh: options.network.Consume(),
 		quitCh:    make(chan struct{}, 1),
 	}
@@ -97,11 +96,11 @@ func (n *node) createBlock() error {
 	return nil
 }
 
-func (n *node) fetchBlock(peer types.PeerID, remoteHeight uint32) error {
+func (n *node) fetchBlock(peer network.PeerID, remoteHeight uint32) error {
 	n.logger.Info().Str("peer", peer.String()).Uint32("ownHeight", n.chain.CurrentHeader().Height).Uint32("blockHeight", remoteHeight).Msg("fetching blocks")
 
 	nextHeight := n.chain.CurrentHeader().Height + 1
-	msg, err := NewFetchBlockMessage(types.PeerID(n.id), nextHeight, remoteHeight)
+	msg, err := NewFetchBlockMessage(network.PeerID(n.id), nextHeight, remoteHeight)
 	if err != nil {
 		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("creating fetch message failed")
 		return err
@@ -115,7 +114,7 @@ func (n *node) fetchBlock(peer types.PeerID, remoteHeight uint32) error {
 	return nil
 }
 
-func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
+func (n *node) processBlock(peer network.PeerID, block *core.Block) error {
 	n.logger.Info().Str("peer", peer.String()).Str("bHash", block.Header.Hash().String()).Msg("new block arrived")
 	if err := n.chain.AddBlock(block); err != nil {
 		if err == core.ErrBlockTooHigh {
@@ -138,7 +137,7 @@ func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
 	return nil
 }
 
-func (n *node) broadcastBlock(from types.PeerID, block *core.Block) error {
+func (n *node) broadcastBlock(from network.PeerID, block *core.Block) error {
 	buf := new(bytes.Buffer)
 	if err := core.EncodeBlock(buf, block); err != nil {
 		return err
@@ -156,7 +155,7 @@ func (n *node) broadcastBlock(from types.PeerID, block *core.Block) error {
 	return nil
 }
 
-func (n *node) processTransaction(peer types.PeerID, tx *core.Transaction) error {
+func (n *node) processTransaction(peer network.PeerID, tx *core.Transaction) error {
 	if err := n.txpool.Add(tx); err != nil {
 		return err
 	}
@@ -166,7 +165,7 @@ func (n *node) processTransaction(peer types.PeerID, tx *core.Transaction) error
 	return nil
 }
 
-func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) error {
+func (n *node) broadcastTransaction(from network.PeerID, tx *core.Transaction) error {
 	buf := new(bytes.Buffer)
 	if err := core.EncodeTransaction(buf, tx); err != nil {
 		return err
@@ -184,7 +183,7 @@ func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) err
 	return nil
 }
 
-func (n *node) processBlockFetch(peer types.PeerID, payload *FetchBlockMessage) error {
+func (n *node) processBlockFetch(peer network.PeerID, payload *FetchBlockMessage) error {
 	blocks, err := n.chain.GetBlocks(payload.From)
 	if err != nil {
 		n.logger.Error().Err(err).Str("peer", peer.String()).Uint32("fetchBlockFrom", payload.From).Msg("fetching block from chain failed")
@@ -207,7 +206,7 @@ func (n *node) processBlockFetch(peer types.PeerID, payload *FetchBlockMessage) 
 	return nil
 }
 
-func (n *node) processSyncBlock(peer types.PeerID, payload *FetchBlockReply) error {
+func (n *node) processSyncBlock(peer network.PeerID, payload *FetchBlockReply) error {
 	n.logger.Info().Str("from", peer.String()).Int("count", len(payload.Blocks)).Msg("sync blocks arrived")
 
 	for _, block := range payload.Blocks {

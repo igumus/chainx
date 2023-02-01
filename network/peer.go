@@ -6,12 +6,24 @@ import (
 	"io"
 	"net"
 
-	"github.com/igumus/chainx/types"
 	"github.com/rs/zerolog/log"
 )
 
+type PeerState byte
+
+const (
+	PendingPeer    PeerState = 0x0
+	HandshakedPeer PeerState = 0x1
+)
+
+type PeerID string
+
+func (pid PeerID) String() string {
+	return string(pid)
+}
+
 type Peer interface {
-	ID() types.PeerID
+	ID() PeerID
 	Type() string
 	Addr() string
 	Send([]byte) error
@@ -21,7 +33,7 @@ type Peer interface {
 
 type peer struct {
 	id       string
-	state    types.PeerState
+	state    PeerState
 	peerType string
 	conn     net.Conn
 	incoming bool
@@ -57,8 +69,8 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- RemoteMessage) {
 		}
 
 		from := p.ID()
-		if p.state == types.PendingPeer {
-			from = types.PeerID(p.Addr())
+		if p.state == PendingPeer {
+			from = PeerID(p.Addr())
 		}
 
 		rpcCh <- RemoteMessage{
@@ -72,7 +84,7 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- RemoteMessage) {
 
 func (p *peer) handshake(id string) {
 	p.id = id
-	p.state = types.HandshakedPeer
+	p.state = HandshakedPeer
 	log.Info().Str("peer", p.id).Str("addr", p.conn.RemoteAddr().String()).Msg("changed peer state to handshaked")
 }
 
@@ -84,8 +96,8 @@ func (p *peer) Type() string {
 	return p.peerType
 }
 
-func (p *peer) ID() types.PeerID {
-	return types.PeerID(p.id)
+func (p *peer) ID() PeerID {
+	return PeerID(p.id)
 }
 
 func (p *peer) Addr() string {

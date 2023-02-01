@@ -3,8 +3,6 @@ package network
 import (
 	"bytes"
 	"encoding/gob"
-
-	"github.com/igumus/chainx/types"
 )
 
 type RemoteMessageHandler interface {
@@ -12,7 +10,7 @@ type RemoteMessageHandler interface {
 }
 
 type RemoteMessage struct {
-	From    types.PeerID
+	From    PeerID
 	Payload []byte
 }
 

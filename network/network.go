@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/igumus/chainx/crypto"
-	"github.com/igumus/chainx/types"
 	"github.com/rs/zerolog"
 )
 
@@ -20,8 +19,8 @@ type Network interface {
 	Start()
 	Dial(addr string) (string, error)
 	Consume() <-chan RemoteMessage
-	Send(peer types.PeerID, msg *Message) error
-	Broadcast(msg *Message, sender types.PeerID) error
+	Send(peer PeerID, msg *Message) error
+	Broadcast(msg *Message, sender PeerID) error
 	io.Closer
 	RemoteMessageHandler
 }
@@ -40,10 +39,10 @@ type network struct {
 	messageCh chan RemoteMessage
 
 	lock  sync.RWMutex
-	peers map[types.PeerID]*peer
+	peers map[PeerID]*peer
 
 	pendingLock  sync.RWMutex
-	pendingPeers map[types.PeerID]*peer
+	pendingPeers map[PeerID]*peer
 }
 
 func New(options ...NetworkOption) (Network, error) {
@@ -63,8 +62,8 @@ func New(options ...NetworkOption) (Network, error) {
 		delPeerCh:    make(chan *peer),
 		rpcPeerCh:    make(chan RemoteMessage, 1024),
 		messageCh:    make(chan RemoteMessage, 1024),
-		peers:        make(map[types.PeerID]*peer),
-		pendingPeers: make(map[types.PeerID]*peer),
+		peers:        make(map[PeerID]*peer),
+		pendingPeers: make(map[PeerID]*peer),
 	}
 
 	tr, err := newTCPTransport(n.id, config.tcpTransport, n.addPeerCh)
@@ -107,12 +106,12 @@ func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
 
 	peer := &peer{
 		peerType: conn.LocalAddr().Network(),
-		state:    types.PendingPeer,
+		state:    PendingPeer,
 		conn:     conn,
 		incoming: incoming,
 	}
 
-	id := types.PeerID(conn.RemoteAddr().String())
+	id := PeerID(conn.RemoteAddr().String())
 
 	n.pendingLock.Lock()
 	n.logger.Info().Str("peerAddr", conn.RemoteAddr().String()).Int("count", len(n.pendingPeers)).Msg("peer joined to cluster")
@@ -168,7 +167,7 @@ func (n *network) HandleMessage(rpc RemoteMessage) error {
 	}
 }
 
-func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byte, reply bool) error {
+func (n *network) processPeerHandshake(from PeerID, rawHandshakeData []byte, reply bool) error {
 	msg, err := decodeHandshakeMessage(rawHandshakeData)
 	if err != nil {
 		return err
@@ -267,7 +266,7 @@ func (n *network) Close() error {
 	return n.transport.Close()
 }
 
-func (n *network) send(to types.PeerID, messageType MessageType, payload any) error {
+func (n *network) send(to PeerID, messageType MessageType, payload any) error {
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(payload); err != nil {
 		return err
@@ -281,7 +280,7 @@ func (n *network) send(to types.PeerID, messageType MessageType, payload any) er
 	return n.Send(to, msg)
 }
 
-func (n *network) Send(to types.PeerID, msg *Message) error {
+func (n *network) Send(to PeerID, msg *Message) error {
 	dmsg, err := msg.Bytes()
 	if err != nil {
 		return err
@@ -298,7 +297,7 @@ func (n *network) Send(to types.PeerID, msg *Message) error {
 	return peer.Send(dmsg)
 }
 
-func (n *network) Broadcast(msg *Message, sender types.PeerID) error {
+func (n *network) Broadcast(msg *Message, sender PeerID) error {
 	dmsg, err := msg.Bytes()
 	if err != nil {
 		return err
