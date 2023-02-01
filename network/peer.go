@@ -6,28 +6,41 @@ import (
 	"io"
 	"net"
 
-	"github.com/igumus/chainx/types"
 	"github.com/rs/zerolog/log"
 )
 
+type PeerState byte
+
+const (
+	PendingPeer    PeerState = 0x0
+	HandshakedPeer PeerState = 0x1
+)
+
+type PeerID string
+
+func (pid PeerID) String() string {
+	return string(pid)
+}
+
 type Peer interface {
-	ID() types.PeerID
+	ID() PeerID
 	Type() string
 	Addr() string
-	Send([]byte) error
+	Send(*Message) error
+	SendRaw([]byte) error
 	IsOutgoing() bool
 	io.Closer
 }
 
 type peer struct {
 	id       string
-	state    types.PeerState
+	state    PeerState
 	peerType string
 	conn     net.Conn
 	incoming bool
 }
 
-func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
+func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- RemoteMessage) {
 	var (
 		size int64 = 0
 		buf  *bytes.Buffer
@@ -57,11 +70,11 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 		}
 
 		from := p.ID()
-		if p.state == types.PendingPeer {
-			from = types.PeerID(p.Addr())
+		if p.state == PendingPeer {
+			from = PeerID(p.Addr())
 		}
 
-		rpcCh <- types.RemoteMessage{
+		rpcCh <- RemoteMessage{
 			From:    from,
 			Payload: buf.Bytes(),
 		}
@@ -72,7 +85,7 @@ func (p *peer) readLoop(delCh chan<- *peer, rpcCh chan<- types.RemoteMessage) {
 
 func (p *peer) handshake(id string) {
 	p.id = id
-	p.state = types.HandshakedPeer
+	p.state = HandshakedPeer
 	log.Info().Str("peer", p.id).Str("addr", p.conn.RemoteAddr().String()).Msg("changed peer state to handshaked")
 }
 
@@ -84,8 +97,8 @@ func (p *peer) Type() string {
 	return p.peerType
 }
 
-func (p *peer) ID() types.PeerID {
-	return types.PeerID(p.id)
+func (p *peer) ID() PeerID {
+	return PeerID(p.id)
 }
 
 func (p *peer) Addr() string {
@@ -96,7 +109,15 @@ func (p *peer) Close() error {
 	return p.conn.Close()
 }
 
-func (p *peer) Send(b []byte) error {
+func (p *peer) Send(msg *Message) error {
+	payload, err := msg.Bytes()
+	if err != nil {
+		return err
+	}
+	return p.SendRaw(payload)
+}
+
+func (p *peer) SendRaw(b []byte) error {
 	err := binary.Write(p.conn, binary.LittleEndian, int64(len(b)))
 	if err != nil {
 		return err

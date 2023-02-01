@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/igumus/chainx/crypto"
-	"github.com/igumus/chainx/types"
 	"github.com/rs/zerolog"
 )
 
@@ -17,11 +16,11 @@ type Network interface {
 	Name() string
 	Start()
 	Dial(addr string) (string, error)
-	Consume() <-chan types.RemoteMessage
-	Send(peer types.PeerID, msg *types.Message) error
-	Broadcast(msg *types.Message, sender types.PeerID) error
+	Consume() <-chan RemoteMessage
+	Send(PeerID, MessageType, any) error
+	Broadcast(*Message, PeerID) error
 	io.Closer
-	types.RemoteMessageHandler
+	RemoteMessageHandler
 }
 
 type network struct {
@@ -34,14 +33,14 @@ type network struct {
 	transport Transport
 	addPeerCh chan net.Conn
 	delPeerCh chan *peer
-	rpcPeerCh chan types.RemoteMessage
-	messageCh chan types.RemoteMessage
+	rpcPeerCh chan RemoteMessage
+	messageCh chan RemoteMessage
 
 	lock  sync.RWMutex
-	peers map[types.PeerID]*peer
+	peers map[PeerID]*peer
 
 	pendingLock  sync.RWMutex
-	pendingPeers map[types.PeerID]*peer
+	pendingPeers map[PeerID]*peer
 }
 
 func New(options ...NetworkOption) (Network, error) {
@@ -59,10 +58,10 @@ func New(options ...NetworkOption) (Network, error) {
 		seedNodes:    config.nodes,
 		addPeerCh:    make(chan net.Conn),
 		delPeerCh:    make(chan *peer),
-		rpcPeerCh:    make(chan types.RemoteMessage, 1024),
-		messageCh:    make(chan types.RemoteMessage, 1024),
-		peers:        make(map[types.PeerID]*peer),
-		pendingPeers: make(map[types.PeerID]*peer),
+		rpcPeerCh:    make(chan RemoteMessage, 1024),
+		messageCh:    make(chan RemoteMessage, 1024),
+		peers:        make(map[PeerID]*peer),
+		pendingPeers: make(map[PeerID]*peer),
 	}
 
 	tr, err := newTCPTransport(n.id, config.tcpTransport, n.addPeerCh)
@@ -105,12 +104,12 @@ func (n *network) processPeerJoin(conn net.Conn, incoming bool) *peer {
 
 	peer := &peer{
 		peerType: conn.LocalAddr().Network(),
-		state:    types.PendingPeer,
+		state:    PendingPeer,
 		conn:     conn,
 		incoming: incoming,
 	}
 
-	id := types.PeerID(conn.RemoteAddr().String())
+	id := PeerID(conn.RemoteAddr().String())
 
 	n.pendingLock.Lock()
 	n.logger.Info().Str("peerAddr", conn.RemoteAddr().String()).Int("count", len(n.pendingPeers)).Msg("peer joined to cluster")
@@ -132,29 +131,29 @@ func (n *network) processPeerLeave(peer Peer) {
 	n.lock.Unlock()
 }
 
-func (n *network) HandleMessage(rpc types.RemoteMessage) error {
-	message, err := rpc.Decode()
-	if err != nil {
+func (n *network) HandleMessage(rpc RemoteMessage) error {
+	message := &Message{}
+	if err := Decode(rpc.Payload, message); err != nil {
 		return err
 	}
 
 	switch message.Header {
-	case types.NetworkHandshake:
+	case NetworkHandshake:
 		n.logger.Info().Str("from", rpc.From.String()).Msg("received new handshake message")
 		return n.processPeerHandshake(rpc.From, message.Data, false)
-	case types.NetworkHandshakeReply:
+	case NetworkHandshakeReply:
 		n.logger.Info().Str("from", rpc.From.String()).Msg("received handshake reply message")
 		return n.processPeerHandshake(rpc.From, message.Data, true)
-	case types.NetworkReserved_2:
+	case NetworkReserved_2:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_2").Msg("unhandled network message")
 		return nil
-	case types.NetworkReserved_3:
+	case NetworkReserved_3:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_3").Msg("unhandled network message")
 		return nil
-	case types.NetworkReserved_4:
+	case NetworkReserved_4:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_4").Msg("unhandled network message")
 		return nil
-	case types.NetworkReserved_5:
+	case NetworkReserved_5:
 		n.logger.Warn().Str("from", rpc.From.String()).Str("type", "NetworkReserved_5").Msg("unhandled network message")
 		return nil
 	default:
@@ -166,9 +165,9 @@ func (n *network) HandleMessage(rpc types.RemoteMessage) error {
 	}
 }
 
-func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byte, reply bool) error {
-	msg, err := decodeHandshakeMessage(rawHandshakeData)
-	if err != nil {
+func (n *network) processPeerHandshake(from PeerID, rawHandshakeData []byte, reply bool) error {
+	msg := &networkHandshakeMessage{}
+	if err := Decode(rawHandshakeData, msg); err != nil {
 		return err
 	}
 
@@ -194,17 +193,15 @@ func (n *network) processPeerHandshake(from types.PeerID, rawHandshakeData []byt
 		return nil
 	}
 
-	handshakeReply := &networkHandshakeReplyMessage{
+	replyMsg, err := NewMessage(NetworkHandshakeReply, networkHandshakeReplyMessage{
 		Id:   n.ID(),
 		Addr: n.transport.Addr(),
-	}
-
-	hmsg, err := handshakeReply.message()
+	})
 	if err != nil {
 		return err
 	}
 
-	return peer.Send(hmsg)
+	return peer.Send(replyMsg)
 }
 
 func (n *network) Start() {
@@ -214,7 +211,7 @@ func (n *network) Start() {
 	n.bootstrap()
 }
 
-func (n *network) Consume() <-chan types.RemoteMessage {
+func (n *network) Consume() <-chan RemoteMessage {
 	return n.messageCh
 }
 
@@ -237,16 +234,15 @@ func (n *network) Dial(addr string) (string, error) {
 	n.logger.Info().Str("addr", addr).Msg("waiting one second to send handshake")
 	time.Sleep(1 * time.Second)
 
-	handshake := &networkHandshakeMessage{
+	handshake, err := NewMessage(NetworkHandshake, networkHandshakeMessage{
 		Id:   n.ID(),
 		Addr: n.transport.Addr(),
-	}
-
-	msg, err := handshake.message()
+	})
 	if err != nil {
 		return "", err
 	}
-	if err := peer.Send(msg); err != nil {
+
+	if err := peer.Send(handshake); err != nil {
 		return "", err
 	}
 
@@ -265,8 +261,8 @@ func (n *network) Close() error {
 	return n.transport.Close()
 }
 
-func (n *network) Send(to types.PeerID, msg *types.Message) error {
-	dmsg, err := msg.Bytes()
+func (n *network) Send(to PeerID, mtype MessageType, data any) error {
+	msg, err := NewMessage(mtype, data)
 	if err != nil {
 		return err
 	}
@@ -279,10 +275,10 @@ func (n *network) Send(to types.PeerID, msg *types.Message) error {
 		// TODO (@igumus): maybe we should include peer searching mechanism
 		return fmt.Errorf("unknown peer: %s", to)
 	}
-	return peer.Send(dmsg)
+	return peer.Send(msg)
 }
 
-func (n *network) Broadcast(msg *types.Message, sender types.PeerID) error {
+func (n *network) Broadcast(msg *Message, sender PeerID) error {
 	dmsg, err := msg.Bytes()
 	if err != nil {
 		return err
@@ -293,7 +289,7 @@ func (n *network) Broadcast(msg *types.Message, sender types.PeerID) error {
 	for id, peer := range n.peers {
 		if id != sender {
 			go func(p Peer) {
-				if err := p.Send(dmsg); err != nil {
+				if err := p.SendRaw(dmsg); err != nil {
 					n.logger.Error().Str("peer", p.ID().String()).Err(err).Msg("sending broadcast message failed")
 					return
 				}

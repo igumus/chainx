@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/igumus/chainx/hash"
-	"github.com/igumus/chainx/types"
 )
 
 func GenerateKeyPair() (*KeyPair, error) {
@@ -33,9 +32,9 @@ func (p *KeyPair) publicKey() []byte {
 	return elliptic.MarshalCompressed(pkey, pkey.X, pkey.Y)
 }
 
-func (p *KeyPair) Address() types.Address {
+func (p *KeyPair) Address() Address {
 	h := hash.CreateHash(p.publicKey())
-	return types.AddressFromBytes(h)
+	return AddressFromBytes(h)
 }
 
 func (p *KeyPair) Sign(data []byte) (*Signature, error) {

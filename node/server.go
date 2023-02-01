@@ -8,17 +8,16 @@ import (
 	"github.com/igumus/chainx/core"
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/network"
-	"github.com/igumus/chainx/types"
 	"github.com/rs/zerolog"
 )
 
 type Node interface {
 	Start()
-	types.RemoteMessageHandler
+	network.RemoteMessageHandler
 }
 
 type node struct {
-	id        types.PeerID
+	id        network.PeerID
 	debug     bool
 	validator bool
 	blockTime time.Duration
@@ -27,7 +26,7 @@ type node struct {
 	chain     core.BlockChain
 	network   network.Network
 	logger    zerolog.Logger
-	messageCh <-chan types.RemoteMessage
+	messageCh <-chan network.RemoteMessage
 	quitCh    chan struct{}
 }
 
@@ -46,7 +45,7 @@ func New(opts ...NodeOption) (Node, error) {
 		txpool:    options.pool,
 		chain:     options.chain,
 		network:   options.network,
-		id:        types.PeerID(options.network.ID()),
+		id:        network.PeerID(options.network.ID()),
 		messageCh: options.network.Consume(),
 		quitCh:    make(chan struct{}, 1),
 	}
@@ -97,25 +96,24 @@ func (n *node) createBlock() error {
 	return nil
 }
 
-func (n *node) fetchBlock(peer types.PeerID, remoteHeight uint32) error {
+func (n *node) fetchBlock(peer network.PeerID, remoteHeight uint32) error {
 	n.logger.Info().Str("peer", peer.String()).Uint32("ownHeight", n.chain.CurrentHeader().Height).Uint32("blockHeight", remoteHeight).Msg("fetching blocks")
 
 	nextHeight := n.chain.CurrentHeader().Height + 1
-	msg, err := NewFetchBlockMessage(types.PeerID(n.id), nextHeight, remoteHeight)
-	if err != nil {
-		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("creating fetch message failed")
-		return err
+	request := FetchBlockMessage{
+		ID:   n.id,
+		From: nextHeight,
 	}
 
-	if err := n.network.Send(peer, msg); err != nil {
-		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("sending fetch message failed")
+	if err := n.network.Send(peer, network.ChainFetchBlock, request); err != nil {
+		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("creating fetch message failed")
 		return err
 	}
 
 	return nil
 }
 
-func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
+func (n *node) processBlock(peer network.PeerID, block *core.Block) error {
 	n.logger.Info().Str("peer", peer.String()).Str("bHash", block.Header.Hash().String()).Msg("new block arrived")
 	if err := n.chain.AddBlock(block); err != nil {
 		if err == core.ErrBlockTooHigh {
@@ -138,14 +136,14 @@ func (n *node) processBlock(peer types.PeerID, block *core.Block) error {
 	return nil
 }
 
-func (n *node) broadcastBlock(from types.PeerID, block *core.Block) error {
+func (n *node) broadcastBlock(from network.PeerID, block *core.Block) error {
 	buf := new(bytes.Buffer)
 	if err := core.EncodeBlock(buf, block); err != nil {
 		return err
 	}
 
-	message := &types.Message{
-		Header: types.ChainBlock,
+	message := &network.Message{
+		Header: network.ChainBlock,
 		Data:   buf.Bytes(),
 	}
 
@@ -156,7 +154,7 @@ func (n *node) broadcastBlock(from types.PeerID, block *core.Block) error {
 	return nil
 }
 
-func (n *node) processTransaction(peer types.PeerID, tx *core.Transaction) error {
+func (n *node) processTransaction(peer network.PeerID, tx *core.Transaction) error {
 	if err := n.txpool.Add(tx); err != nil {
 		return err
 	}
@@ -166,14 +164,14 @@ func (n *node) processTransaction(peer types.PeerID, tx *core.Transaction) error
 	return nil
 }
 
-func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) error {
+func (n *node) broadcastTransaction(from network.PeerID, tx *core.Transaction) error {
 	buf := new(bytes.Buffer)
 	if err := core.EncodeTransaction(buf, tx); err != nil {
 		return err
 	}
 
-	message := &types.Message{
-		Header: types.ChainTx,
+	message := &network.Message{
+		Header: network.ChainTx,
 		Data:   buf.Bytes(),
 	}
 
@@ -184,20 +182,14 @@ func (n *node) broadcastTransaction(from types.PeerID, tx *core.Transaction) err
 	return nil
 }
 
-func (n *node) processBlockFetch(peer types.PeerID, payload *FetchBlockMessage) error {
+func (n *node) processBlockFetch(peer network.PeerID, payload *FetchBlockMessage) error {
 	blocks, err := n.chain.GetBlocks(payload.From)
 	if err != nil {
 		n.logger.Error().Err(err).Str("peer", peer.String()).Uint32("fetchBlockFrom", payload.From).Msg("fetching block from chain failed")
 		return err
 	}
 
-	reply, err := NewFetchBlockReply(blocks)
-	if err != nil {
-		n.logger.Error().Err(err).Str("peer", peer.String()).Msg("creating fetch block reply message failed")
-		return err
-	}
-
-	if err := n.network.Send(peer, reply); err != nil {
+	if err := n.network.Send(peer, network.ChainFetchBlockReply, FetchBlockReply{Blocks: blocks}); err != nil {
 		n.logger.Error().Err(err).Str("peer", peer.String()).Msg("sending reply message to peer failed")
 		return err
 	}
@@ -207,7 +199,7 @@ func (n *node) processBlockFetch(peer types.PeerID, payload *FetchBlockMessage) 
 	return nil
 }
 
-func (n *node) processSyncBlock(peer types.PeerID, payload *FetchBlockReply) error {
+func (n *node) processSyncBlock(peer network.PeerID, payload *FetchBlockReply) error {
 	n.logger.Info().Str("from", peer.String()).Int("count", len(payload.Blocks)).Msg("sync blocks arrived")
 
 	for _, block := range payload.Blocks {
@@ -220,9 +212,9 @@ func (n *node) processSyncBlock(peer types.PeerID, payload *FetchBlockReply) err
 	return nil
 }
 
-func (n *node) HandleMessage(msg types.RemoteMessage) error {
-	decodedMessage, err := msg.Decode()
-	if err != nil {
+func (n *node) HandleMessage(msg network.RemoteMessage) error {
+	decodedMessage := &network.Message{}
+	if err := network.Decode(msg.Payload, decodedMessage); err != nil {
 		return err
 	}
 
@@ -230,25 +222,25 @@ func (n *node) HandleMessage(msg types.RemoteMessage) error {
 	payload := bytes.NewReader(decodedMessage.Data)
 
 	switch decodedMessage.Header {
-	case types.ChainTx:
+	case network.ChainTx:
 		data := &core.Transaction{}
 		if err := core.DecodeTransaction(payload, data); err != nil {
 			return err
 		}
 		return n.processTransaction(peer, data)
-	case types.ChainBlock:
+	case network.ChainBlock:
 		data := &core.Block{}
 		if err := core.DecodeBlock(payload, data); err != nil {
 			return err
 		}
 		return n.processBlock(peer, data)
-	case types.ChainFetchBlock:
+	case network.ChainFetchBlock:
 		data := &FetchBlockMessage{}
 		if err := gob.NewDecoder(payload).Decode(data); err != nil {
 			return err
 		}
 		return n.processBlockFetch(peer, data)
-	case types.ChainFetchBlockReply:
+	case network.ChainFetchBlockReply:
 		data := &FetchBlockReply{}
 		if err := gob.NewDecoder(payload).Decode(data); err != nil {
 			return err

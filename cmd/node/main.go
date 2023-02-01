@@ -11,7 +11,6 @@ import (
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/network"
 	"github.com/igumus/chainx/node"
-	"github.com/igumus/chainx/types"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -97,8 +96,8 @@ func sendTransaction(k *crypto.KeyPair, n network.Network) {
 		return
 	}
 
-	message := &types.Message{
-		Header: types.ChainTx,
+	message := &network.Message{
+		Header: network.ChainTx,
 		Data:   buf.Bytes(),
 	}
 
@@ -108,8 +107,8 @@ func sendTransaction(k *crypto.KeyPair, n network.Network) {
 		return
 	}
 
-	remote := types.RemoteMessage{
-		From:    types.PeerID(k.Address().String()),
+	remote := network.RemoteMessage{
+		From:    network.PeerID(k.Address().String()),
 		Payload: mbuf,
 	}
 	if err := n.HandleMessage(remote); err != nil {
