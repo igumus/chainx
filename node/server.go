@@ -100,14 +100,13 @@ func (n *node) fetchBlock(peer network.PeerID, remoteHeight uint32) error {
 	n.logger.Info().Str("peer", peer.String()).Uint32("ownHeight", n.chain.CurrentHeader().Height).Uint32("blockHeight", remoteHeight).Msg("fetching blocks")
 
 	nextHeight := n.chain.CurrentHeader().Height + 1
-	msg, err := NewFetchBlockMessage(network.PeerID(n.id), nextHeight, remoteHeight)
-	if err != nil {
-		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("creating fetch message failed")
-		return err
+	request := FetchBlockMessage{
+		ID:   n.id,
+		From: nextHeight,
 	}
 
-	if err := n.network.Send(peer, msg); err != nil {
-		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("sending fetch message failed")
+	if err := n.network.Send(peer, network.ChainFetchBlock, request); err != nil {
+		n.logger.Error().Str("peer", peer.String()).Err(err).Msg("creating fetch message failed")
 		return err
 	}
 
@@ -190,13 +189,7 @@ func (n *node) processBlockFetch(peer network.PeerID, payload *FetchBlockMessage
 		return err
 	}
 
-	reply, err := NewFetchBlockReply(blocks)
-	if err != nil {
-		n.logger.Error().Err(err).Str("peer", peer.String()).Msg("creating fetch block reply message failed")
-		return err
-	}
-
-	if err := n.network.Send(peer, reply); err != nil {
+	if err := n.network.Send(peer, network.ChainFetchBlockReply, FetchBlockReply{Blocks: blocks}); err != nil {
 		n.logger.Error().Err(err).Str("peer", peer.String()).Msg("sending reply message to peer failed")
 		return err
 	}
@@ -220,8 +213,8 @@ func (n *node) processSyncBlock(peer network.PeerID, payload *FetchBlockReply) e
 }
 
 func (n *node) HandleMessage(msg network.RemoteMessage) error {
-	decodedMessage, err := msg.Decode()
-	if err != nil {
+	decodedMessage := &network.Message{}
+	if err := network.Decode(msg.Payload, decodedMessage); err != nil {
 		return err
 	}
 

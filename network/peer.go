@@ -26,7 +26,8 @@ type Peer interface {
 	ID() PeerID
 	Type() string
 	Addr() string
-	Send([]byte) error
+	Send(*Message) error
+	SendRaw([]byte) error
 	IsOutgoing() bool
 	io.Closer
 }
@@ -108,7 +109,15 @@ func (p *peer) Close() error {
 	return p.conn.Close()
 }
 
-func (p *peer) Send(b []byte) error {
+func (p *peer) Send(msg *Message) error {
+	payload, err := msg.Bytes()
+	if err != nil {
+		return err
+	}
+	return p.SendRaw(payload)
+}
+
+func (p *peer) SendRaw(b []byte) error {
 	err := binary.Write(p.conn, binary.LittleEndian, int64(len(b)))
 	if err != nil {
 		return err

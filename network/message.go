@@ -9,19 +9,6 @@ type RemoteMessageHandler interface {
 	HandleMessage(RemoteMessage) error
 }
 
-type RemoteMessage struct {
-	From    PeerID
-	Payload []byte
-}
-
-func (m RemoteMessage) Decode() (*Message, error) {
-	msg := &Message{}
-	if err := gob.NewDecoder(bytes.NewReader(m.Payload)).Decode(msg); err != nil {
-		return nil, err
-	}
-	return msg, nil
-}
-
 type MessageType byte
 
 const (
@@ -41,9 +28,32 @@ const (
 	ChainFetchBlockReply MessageType = 0xb
 )
 
+func Decode(payload []byte, msg any) error {
+	if err := gob.NewDecoder(bytes.NewReader(payload)).Decode(msg); err != nil {
+		return err
+	}
+	return nil
+}
+
+type RemoteMessage struct {
+	From    PeerID
+	Payload []byte
+}
+
 type Message struct {
 	Header MessageType
 	Data   []byte
+}
+
+func NewMessage(mt MessageType, data any) (*Message, error) {
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(data); err != nil {
+		return nil, err
+	}
+	return &Message{
+		Header: mt,
+		Data:   buf.Bytes(),
+	}, nil
 }
 
 func (m *Message) Bytes() ([]byte, error) {

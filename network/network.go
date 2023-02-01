@@ -1,8 +1,6 @@
 package network
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"net"
@@ -19,8 +17,8 @@ type Network interface {
 	Start()
 	Dial(addr string) (string, error)
 	Consume() <-chan RemoteMessage
-	Send(peer PeerID, msg *Message) error
-	Broadcast(msg *Message, sender PeerID) error
+	Send(PeerID, MessageType, any) error
+	Broadcast(*Message, PeerID) error
 	io.Closer
 	RemoteMessageHandler
 }
@@ -134,8 +132,8 @@ func (n *network) processPeerLeave(peer Peer) {
 }
 
 func (n *network) HandleMessage(rpc RemoteMessage) error {
-	message, err := rpc.Decode()
-	if err != nil {
+	message := &Message{}
+	if err := Decode(rpc.Payload, message); err != nil {
 		return err
 	}
 
@@ -168,8 +166,8 @@ func (n *network) HandleMessage(rpc RemoteMessage) error {
 }
 
 func (n *network) processPeerHandshake(from PeerID, rawHandshakeData []byte, reply bool) error {
-	msg, err := decodeHandshakeMessage(rawHandshakeData)
-	if err != nil {
+	msg := &networkHandshakeMessage{}
+	if err := Decode(rawHandshakeData, msg); err != nil {
 		return err
 	}
 
@@ -195,17 +193,15 @@ func (n *network) processPeerHandshake(from PeerID, rawHandshakeData []byte, rep
 		return nil
 	}
 
-	handshakeReply := &networkHandshakeReplyMessage{
+	replyMsg, err := NewMessage(NetworkHandshakeReply, networkHandshakeReplyMessage{
 		Id:   n.ID(),
 		Addr: n.transport.Addr(),
-	}
-
-	hmsg, err := handshakeReply.message()
+	})
 	if err != nil {
 		return err
 	}
 
-	return peer.Send(hmsg)
+	return peer.Send(replyMsg)
 }
 
 func (n *network) Start() {
@@ -238,16 +234,15 @@ func (n *network) Dial(addr string) (string, error) {
 	n.logger.Info().Str("addr", addr).Msg("waiting one second to send handshake")
 	time.Sleep(1 * time.Second)
 
-	handshake := &networkHandshakeMessage{
+	handshake, err := NewMessage(NetworkHandshake, networkHandshakeMessage{
 		Id:   n.ID(),
 		Addr: n.transport.Addr(),
-	}
-
-	msg, err := handshake.message()
+	})
 	if err != nil {
 		return "", err
 	}
-	if err := peer.Send(msg); err != nil {
+
+	if err := peer.Send(handshake); err != nil {
 		return "", err
 	}
 
@@ -266,22 +261,8 @@ func (n *network) Close() error {
 	return n.transport.Close()
 }
 
-func (n *network) send(to PeerID, messageType MessageType, payload any) error {
-	buf := new(bytes.Buffer)
-	if err := gob.NewEncoder(buf).Encode(payload); err != nil {
-		return err
-	}
-
-	msg := &Message{
-		Header: messageType,
-		Data:   buf.Bytes(),
-	}
-
-	return n.Send(to, msg)
-}
-
-func (n *network) Send(to PeerID, msg *Message) error {
-	dmsg, err := msg.Bytes()
+func (n *network) Send(to PeerID, mtype MessageType, data any) error {
+	msg, err := NewMessage(mtype, data)
 	if err != nil {
 		return err
 	}
@@ -294,7 +275,7 @@ func (n *network) Send(to PeerID, msg *Message) error {
 		// TODO (@igumus): maybe we should include peer searching mechanism
 		return fmt.Errorf("unknown peer: %s", to)
 	}
-	return peer.Send(dmsg)
+	return peer.Send(msg)
 }
 
 func (n *network) Broadcast(msg *Message, sender PeerID) error {
@@ -308,7 +289,7 @@ func (n *network) Broadcast(msg *Message, sender PeerID) error {
 	for id, peer := range n.peers {
 		if id != sender {
 			go func(p Peer) {
-				if err := p.Send(dmsg); err != nil {
+				if err := p.SendRaw(dmsg); err != nil {
 					n.logger.Error().Str("peer", p.ID().String()).Err(err).Msg("sending broadcast message failed")
 					return
 				}

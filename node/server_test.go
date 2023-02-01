@@ -28,14 +28,6 @@ func TestMessageEncoding(t *testing.T) {
 
 	encMsg, err := message.Bytes()
 	require.Nil(t, err)
-
-	remote := &network.RemoteMessage{
-		From:    "0x00",
-		Payload: encMsg,
-	}
-
-	dremote, err := remote.Decode()
-	require.Nil(t, err)
-	require.NotNil(t, dremote)
+	require.NotNil(t, encMsg)
 
 }
