@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/igumus/chainx/crypto"
 	"github.com/igumus/chainx/hash"
@@ -10,29 +11,16 @@ import (
 type Transaction struct {
 	Data      []byte
 	Signature *crypto.Signature
-
-	// cache purpose
-	txhash hash.Hash
-
-	// transaction order no for locally
-	localOrder int64
 }
 
 func NewTransaction(data []byte) *Transaction {
 	return &Transaction{
-		Data:   data,
-		txhash: []byte{},
+		Data: data,
 	}
 }
 
 func (tx *Transaction) Hash() hash.Hash {
-	if tx.txhash.IsZero() {
-		// calculate hash
-		buf := new(bytes.Buffer)
-		EncodeTransaction(buf, tx)
-		tx.txhash = hash.CreateHash(buf.Bytes())
-	}
-	return tx.txhash
+	return hash.CreateHash(tx.Data)
 }
 
 func (t *Transaction) Sign(kp *crypto.KeyPair) error {
@@ -48,13 +36,14 @@ func (t *Transaction) Verify() error {
 	return t.Signature.Verify(t.Data)
 }
 
-func calculateTransactionHash(txs ...*Transaction) (hash.Hash, error) {
+func calculateTransactionHash(txs []*Transaction) (hash.Hash, error) {
 	buf := new(bytes.Buffer)
 	for _, tx := range txs {
 		if err := tx.Verify(); err != nil {
+			fmt.Printf("tx verification failed: %s\n", err)
 			return hash.ZeroHash, err
 		}
-		if err := EncodeTransaction(buf, tx); err != nil {
+		if _, err := buf.Write(tx.Data); err != nil {
 			return hash.ZeroHash, err
 		}
 	}

@@ -1,8 +1,9 @@
 package core
 
 import (
-	"sort"
-	"time"
+	"sync"
+
+	"github.com/igumus/chainx/hash"
 )
 
 type TXPool interface {
@@ -13,6 +14,7 @@ type TXPool interface {
 	Flush()
 }
 
+/*
 type txsorter struct {
 	items []*Transaction
 }
@@ -40,21 +42,23 @@ func (s *txsorter) Less(i, j int) bool {
 func (s *txsorter) Swap(i, j int) {
 	s.items[i], s.items[j] = s.items[j], s.items[i]
 }
+*/
 
 type pool struct {
-	items map[string]*Transaction
+	lock   sync.RWMutex
+	lookup map[string]hash.Hash
+	items  []*Transaction
 }
 
 func NewTXPool() (TXPool, error) {
 	return &pool{
-		items: make(map[string]*Transaction),
+		lookup: make(map[string]hash.Hash),
+		items:  []*Transaction{},
 	}, nil
 }
 
 func (t *pool) Transactions() []*Transaction {
-	txs := newTxSorter(t.items)
-	sort.Sort(txs)
-	return txs.items
+	return t.items
 }
 
 func (t *pool) Add(tx *Transaction) error {
@@ -62,24 +66,34 @@ func (t *pool) Add(tx *Transaction) error {
 		if err := tx.Verify(); err != nil {
 			return err
 		}
-		txhash := tx.Hash().String()
-		tx.localOrder = time.Now().UnixNano()
-		t.items[txhash] = tx
+
+		t.lock.Lock()
+		txhash := tx.Hash()
+		t.lookup[txhash.String()] = txhash
+		t.items = append(t.items, tx)
+		t.lock.Unlock()
 	}
 
 	return nil
 }
 
 func (t *pool) Contains(tx *Transaction) bool {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
 	txhash := tx.Hash().String()
-	_, ok := t.items[txhash]
+	_, ok := t.lookup[txhash]
 	return ok
 }
 
 func (t *pool) Size() int {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
 	return len(t.items)
 }
 
 func (t *pool) Flush() {
-	t.items = make(map[string]*Transaction)
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.lookup = make(map[string]hash.Hash)
+	t.items = []*Transaction{}
 }

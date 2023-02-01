@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"time"
@@ -73,19 +74,20 @@ func main() {
 	// starting node server
 	go server.Start()
 
+	txTicker := time.NewTicker(1 * time.Second)
 	go func() {
-		time.Sleep(6 * time.Second)
-		size := 10
-		for i := 0; i < size; i++ {
-			sendTransaction(key, network, i)
+		for {
+			sendTransaction(key, network)
+			<-txTicker.C
 		}
 	}()
 
 	select {}
 }
 
-func sendTransaction(k *crypto.KeyPair, n network.Network, idx int) {
-	data := []byte(fmt.Sprintf("foo_%d", time.Now().UnixNano()))
+func sendTransaction(k *crypto.KeyPair, n network.Network) {
+	data := make([]byte, 20)
+	rand.Reader.Read(data)
 	tx := core.NewTransaction(data)
 	tx.Sign(k)
 

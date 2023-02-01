@@ -53,7 +53,7 @@ func GenesisBlock() (*Block, error) {
 }
 
 func NewBlock(prevHeader *Header, txs []*Transaction) (*Block, error) {
-	dataHash, err := calculateTransactionHash(txs...)
+	dataHash, err := calculateTransactionHash(txs)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (b *Block) Verify() error {
 	if err := b.Signature.Verify(data); err != nil {
 		return err
 	}
-	datahash, err := calculateTransactionHash(b.Transactions...)
+	datahash, err := calculateTransactionHash(b.Transactions)
 	if err != nil {
 		return err
 	}

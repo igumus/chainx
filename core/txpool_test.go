@@ -70,7 +70,6 @@ func TestTransactionPoolList(t *testing.T) {
 	size := 10
 	for i := 0; i < size; i++ {
 		tx := NewTransaction([]byte(fmt.Sprintf("foo_%d", i)))
-		tx.localOrder = int64(i)
 		err = tx.Sign(keypair)
 		assert.Nil(t, err)
 

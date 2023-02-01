@@ -11,7 +11,7 @@ import (
 
 func createGenesisHeader(t *testing.T) *Header {
 	tx := createSignedTransaction(t, []byte("genesis"))
-	txHash, err := calculateTransactionHash(tx)
+	txHash, err := calculateTransactionHash([]*Transaction{tx})
 	require.Nil(t, err)
 
 	return &Header{
