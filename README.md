@@ -2,6 +2,12 @@
 
 This project's aim is to explore blockchain consepts from scratch.
 
+## Thanks & Credits 
+
+Thanks to Anthony De Meulemeester 🚀 for his amazing coding sessions.
+
+- [Github](https://github.com/anthdm)
+- [Youtube Channel](https://www.youtube.com/channel/UCIjIAXXsX4YMYeFj-LP42-Q)
 
 ## Requirements
 
@@ -19,12 +25,4 @@ Executing this command will create a bin folder in the root of the project.
 ```
 make test
 ```
-
-
-## Thanks & Credits 
-
-Thanks to Anthony De Meulemeester 🚀 for his amazing coding sessions.
-
-- [Github](https://github.com/anthdm)
-- [Youtube Channel](https://www.youtube.com/channel/UCIjIAXXsX4YMYeFj-LP42-Q)
 
