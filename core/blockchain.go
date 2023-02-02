@@ -16,17 +16,19 @@ type BlockChain interface {
 }
 
 type chain struct {
-	storage    Storage
-	lock       sync.RWMutex
-	prevHeader *Header
-	currHeader *Header
+	storage       Storage
+	lock          sync.RWMutex
+	prevHeader    *Header
+	currHeader    *Header
+	contractState *State
 }
 
 func NewBlockChain() (BlockChain, error) {
 	bc := &chain{
-		storage:    NewMemoryStorage(),
-		prevHeader: nil,
-		currHeader: nil,
+		storage:       NewMemoryStorage(),
+		contractState: NewState(),
+		prevHeader:    nil,
+		currHeader:    nil,
 	}
 
 	genesis, err := GenesisBlock()
@@ -81,8 +83,25 @@ func (bc *chain) addBlock(b *Block) error {
 	bc.prevHeader = bc.currHeader
 	bc.currHeader = b.Header
 
+	for id, tx := range b.Transactions {
+		vm := NewVM(tx.Data, bc.contractState)
+
+		state, err := vm.Run()
+		if err != nil {
+			return err
+		}
+		log.Info().
+			Str("blockhash", b.Header.Hash().String()).
+			Str("txhash", tx.Hash().String()).
+			Int("txSeq", id).
+			Msg("executed transaction")
+
+		bc.contractState.Merge(state)
+
+	}
+
 	log.Info().
-		Str("hash", b.Header.Hash().String()).
+		Str("blockhash", b.Header.Hash().String()).
 		Uint32("height", b.Header.Height).
 		Int("transactions", len(b.Transactions)).
 		Msg("new block")
