@@ -13,6 +13,7 @@ const (
 	InstrStrCreate Instruction = 0x0c
 	InstrStrPack   Instruction = 0x0d
 	InstrStore     Instruction = 0x0e
+	InstrLoadState Instruction = 0x0f
 
 	InstrMultiply Instruction = 0x10
 	InstrSub      Instruction = 0x11
@@ -118,6 +119,20 @@ func (vm *VM) exec(state *State, instr Instruction) error {
 		if err := state.Put(key, buf); err != nil {
 			return err
 		}
+		return nil
+	case InstrLoadState:
+		// check size which should be greater equal than 1
+		size := vm.strSize
+		content := make([]byte, size)
+		for i := size - 1; i >= 0; i-- {
+			content[i] = vm.stack.pop().(byte)
+		}
+		value, err := vm.contractState.Get(content)
+		if err != nil {
+			return err
+		}
+		vm.stack.push(value)
+		vm.strSize = 0
 		return nil
 	}
 	return nil
