@@ -85,8 +85,23 @@ func main() {
 }
 
 func sendTransaction(k *crypto.KeyPair, n network.Network) {
-	data := make([]byte, 20)
-	rand.Reader.Read(data)
+	data := []byte{
+		0x03,
+		byte(core.InstrStrCreate),
+		0x66,
+		byte(core.InstrPushByte),
+		0x6f,
+		byte(core.InstrPushByte),
+		0x6f,
+		byte(core.InstrPushByte),
+		byte(core.InstrStrPack),
+		0x01,
+		byte(core.InstrPushInt),
+		0x02,
+		byte(core.InstrPushInt),
+		byte(core.InstrAdd),
+		byte(core.InstrStore),
+	}
 	tx := core.NewTransaction(data)
 	tx.Sign(k)
 
