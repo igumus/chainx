@@ -1,22 +1,43 @@
 package core
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestVMStack(t *testing.T) {
-	stack := newStack(128)
-	stack.push(1)
-	stack.push(2)
+func TestVMInstrStore(t *testing.T) {
+	state := NewState()
+	contract := []byte{
+		0x03,
+		byte(InstrStrCreate),
+		0x66,
+		byte(InstrPushByte),
+		0x6f,
+		byte(InstrPushByte),
+		0x6f,
+		byte(InstrPushByte),
+		byte(InstrStrPack),
+		0x01,
+		byte(InstrPushInt),
+		0x02,
+		byte(InstrPushInt),
+		byte(InstrSub),
+		byte(InstrStore),
+	}
 
-	value := stack.pop()
-	require.Equal(t, value, 2)
+	vm := NewVM(contract, state)
+	vstate, err := vm.Run()
+	require.Nil(t, err)
+	require.NotNil(t, vstate)
 
-	value = stack.pop()
-	require.Equal(t, value, 1)
+	bvalue, err := vstate.Get([]byte("foo"))
+	require.Nil(t, err)
 
+	value := binary.LittleEndian.Uint64(bvalue)
+	require.Equal(t, value, uint64(1))
+	require.Equal(t, vm.stack.sp, 0)
 }
 
 func TestVMStringCreation(t *testing.T) {
@@ -114,4 +135,17 @@ func TestVMInstrArithmetics(t *testing.T) {
 
 		})
 	}
+}
+
+func TestVMStack(t *testing.T) {
+	stack := newStack(128)
+	stack.push(1)
+	stack.push(2)
+
+	value := stack.pop()
+	require.Equal(t, value, 2)
+
+	value = stack.pop()
+	require.Equal(t, value, 1)
+
 }
