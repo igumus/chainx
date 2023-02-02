@@ -12,6 +12,7 @@ const (
 	InstrPushByte  Instruction = 0x0b
 	InstrStrCreate Instruction = 0x0c
 	InstrStrPack   Instruction = 0x0d
+	InstrStore     Instruction = 0x0e
 
 	InstrMultiply Instruction = 0x10
 	InstrSub      Instruction = 0x11
@@ -43,27 +44,30 @@ func (s *stack) push(b any) {
 }
 
 type VM struct {
-	data    []byte // vm data
-	ip      int    // instruction pointer
-	stack   *stack // stack ds
-	strSize int    // string length
+	data          []byte // vm data
+	ip            int    // instruction pointer
+	stack         *stack // stack ds
+	strSize       int    // string length
+	contractState *State // current contract state
 }
 
-func NewVM(data []byte) *VM {
+func NewVM(data []byte, contractState *State) *VM {
 	return &VM{
-		data:    data,
-		stack:   newStack(1024),
-		ip:      0,
-		strSize: 0,
+		data:          data,
+		stack:         newStack(1024),
+		contractState: contractState,
+		ip:            0,
+		strSize:       0,
 	}
 }
 
-func (vm *VM) Run() error {
+func (vm *VM) Run() (*State, error) {
+	state := NewState()
 	for {
 		instr := vm.data[vm.ip]
 
-		if err := vm.exec(Instruction(instr)); err != nil {
-			return err
+		if err := vm.exec(state, Instruction(instr)); err != nil {
+			return state, err
 		}
 
 		vm.ip++
@@ -71,10 +75,10 @@ func (vm *VM) Run() error {
 			break
 		}
 	}
-	return nil
+	return state, nil
 }
 
-func (vm *VM) exec(instr Instruction) error {
+func (vm *VM) exec(state *State, instr Instruction) error {
 	switch instr {
 	case InstrPushInt:
 		vm.stack.push(vm.data[vm.ip-1])
@@ -102,6 +106,18 @@ func (vm *VM) exec(instr Instruction) error {
 		}
 		vm.stack.push(content)
 		vm.strSize = 0
+		return nil
+	case InstrStore:
+		value, err := vm.toInt()
+		if err != nil {
+			return err
+		}
+		key := vm.stack.pop().([]byte)
+		buf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(buf, value)
+		if err := state.Put(key, buf); err != nil {
+			return err
+		}
 		return nil
 	}
 	return nil

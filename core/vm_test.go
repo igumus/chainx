@@ -44,9 +44,9 @@ func TestVMStringCreation(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			vm := NewVM(tc.contract)
+			vm := NewVM(tc.contract, NewState())
 
-			err := vm.Run()
+			_, err := vm.Run()
 			require.Nil(t, err)
 
 			result := vm.stack.pop().([]byte)
@@ -102,9 +102,9 @@ func TestVMInstrArithmetics(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			vm := NewVM(tc.contract)
+			vm := NewVM(tc.contract, NewState())
 
-			err := vm.Run()
+			_, err := vm.Run()
 			require.Nil(t, err)
 
 			result, err := vm.toInt()
