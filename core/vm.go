@@ -8,10 +8,14 @@ import (
 type Instruction byte
 
 const (
-	InstrPushInt  Instruction = 0x0a
-	InstrMultiply Instruction = 0x0d
-	InstrSub      Instruction = 0x0c
-	InstrAdd      Instruction = 0x0b
+	InstrPushInt   Instruction = 0x0a
+	InstrPushByte  Instruction = 0x0b
+	InstrStrCreate Instruction = 0x0c
+	InstrStrPack   Instruction = 0x0d
+
+	InstrMultiply Instruction = 0x10
+	InstrSub      Instruction = 0x11
+	InstrAdd      Instruction = 0x12
 )
 
 type stack struct {
@@ -39,16 +43,18 @@ func (s *stack) push(b any) {
 }
 
 type VM struct {
-	data  []byte // vm data
-	ip    int    // instruction pointer
-	stack *stack // stack ds
+	data    []byte // vm data
+	ip      int    // instruction pointer
+	stack   *stack // stack ds
+	strSize int    // string length
 }
 
 func NewVM(data []byte) *VM {
 	return &VM{
-		data:  data,
-		ip:    0,
-		stack: newStack(1024),
+		data:    data,
+		stack:   newStack(1024),
+		ip:      0,
+		strSize: 0,
 	}
 }
 
@@ -64,6 +70,39 @@ func (vm *VM) Run() error {
 		if vm.ip > len(vm.data)-1 {
 			break
 		}
+	}
+	return nil
+}
+
+func (vm *VM) exec(instr Instruction) error {
+	switch instr {
+	case InstrPushInt:
+		vm.stack.push(vm.data[vm.ip-1])
+		return nil
+	case InstrAdd:
+		return vm.add()
+	case InstrMultiply:
+		return vm.multiply()
+	case InstrSub:
+		return vm.substract()
+	case InstrPushByte:
+		vm.stack.push(vm.data[vm.ip-1])
+		return nil
+	case InstrStrCreate:
+		// check size which should be greater equal than 1
+		size := int(vm.data[vm.ip-1])
+		vm.strSize = size
+		return nil
+	case InstrStrPack:
+		// check size which should be greater equal than 1
+		size := vm.strSize
+		content := make([]byte, size)
+		for i := size - 1; i >= 0; i-- {
+			content[i] = vm.stack.pop().(byte)
+		}
+		vm.stack.push(content)
+		vm.strSize = 0
+		return nil
 	}
 	return nil
 }
@@ -125,20 +164,5 @@ func (vm *VM) substract() error {
 	}
 	c := va - vb
 	vm.stack.push(c)
-	return nil
-}
-
-func (vm *VM) exec(instr Instruction) error {
-	switch instr {
-	case InstrPushInt:
-		vm.stack.push(vm.data[vm.ip-1])
-		return nil
-	case InstrAdd:
-		return vm.add()
-	case InstrMultiply:
-		return vm.multiply()
-	case InstrSub:
-		return vm.substract()
-	}
 	return nil
 }

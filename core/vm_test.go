@@ -18,6 +18,47 @@ func TestVMStack(t *testing.T) {
 	require.Equal(t, value, 1)
 
 }
+
+func TestVMStringCreation(t *testing.T) {
+	testcases := []struct {
+		name     string
+		contract []byte
+		result   string
+	}{
+		{
+			name: "create-f",
+			contract: []byte{
+				0x03,
+				byte(InstrStrCreate),
+				0x66,
+				byte(InstrPushByte),
+				0x6f,
+				byte(InstrPushByte),
+				0x6f,
+				byte(InstrPushByte),
+				byte(InstrStrPack),
+			},
+			result: "foo",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vm := NewVM(tc.contract)
+
+			err := vm.Run()
+			require.Nil(t, err)
+
+			result := vm.stack.pop().([]byte)
+			require.Nil(t, err)
+			require.Equal(t, result, []byte(tc.result))
+			require.Equal(t, vm.stack.sp, 0)
+
+		})
+	}
+
+}
+
 func TestVMInstrArithmetics(t *testing.T) {
 	testcases := []struct {
 		name     string
